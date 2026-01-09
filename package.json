@@ -1,0 +1,16 @@
+{
+  "name": "pdf2markdown",
+  "version": "1.0.0",
+  "description": "Convert PDF and images to Markdown using DeepSeek OCR",
+  "scripts": {
+    "dev": "concurrently \"npm run server\" \"npm run client\"",
+    "server": "cd server && npm run dev",
+    "client": "cd client && npm start"
+  },
+  "keywords": ["pdf", "markdown", "ocr", "deepseek"],
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  }
+}
