@@ -20,7 +20,7 @@ import {
 import FileUpload from './components/FileUpload';
 import MarkdownPreview from './components/MarkdownPreview';
 import { convertFile, convertFileStream } from './services/api';
-import { PROVIDER_MODELS, DEFAULT_PROMPT } from './config';
+import { PROVIDER_MODELS } from './config';
 
 function App() {
   const [activeTab, setActiveTab] = useState('pdf');

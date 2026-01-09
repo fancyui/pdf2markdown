@@ -9,6 +9,7 @@ const {
   POST_PROCESS_MODEL,
   POST_PROCESS_PROVIDER
 } = require('./config');
+const logger = require('./logger');
 
 async function postProcessDocument(rawMarkdown) {
   const API_KEY = process.env.OPENROUTER_API_KEY;
@@ -16,12 +17,12 @@ async function postProcessDocument(rawMarkdown) {
   const API_MODEL = POST_PROCESS_MODEL;
 
   if (!API_KEY) {
-    console.warn('OPENROUTER_API_KEY not set, skipping post-processing');
+    logger.warn('OPENROUTER_API_KEY not set, skipping post-processing');
     return rawMarkdown;
   }
 
   try {
-    console.log('Starting AI post-processing with model:', API_MODEL);
+    logger.info('Starting AI post-processing with model:', API_MODEL);
 
     const requestData = {
       model: API_MODEL,
@@ -54,11 +55,11 @@ async function postProcessDocument(rawMarkdown) {
       }
     );
 
-    console.log('Post-processing completed');
+    logger.info('Post-processing completed');
     return response.data.choices[0].message.content || rawMarkdown;
   } catch (error) {
-    console.error('Post-processing error:', error.response?.data || error.message);
-    console.warn('Returning raw markdown due to post-processing failure');
+    logger.error('Post-processing error:', error.response?.data || error.message);
+    logger.warn('Returning raw markdown due to post-processing failure');
     return rawMarkdown;
   }
 }
@@ -97,8 +98,8 @@ async function processOCR(imagePath, customPrompt = '', model = null, provider =
   }
 
   try {
-    console.log(`Sending request to ${API_BASE_URL} with model ${API_MODEL}`);
-    console.log(`Using image URL: ${imageUrl || 'base64 encoded'}`);
+    logger.debug(`Sending request to ${API_BASE_URL} with model ${API_MODEL}`);
+    logger.debug(`Using image URL: ${imageUrl || 'base64 encoded'}`);
 
     const userContent = [
       {
@@ -140,7 +141,7 @@ async function processOCR(imagePath, customPrompt = '', model = null, provider =
       top_p: TOP_P,
     };
 
-    console.log('Request data:', JSON.stringify(requestData, null, 2));
+    logger.debug('Request data:', JSON.stringify(requestData, null, 2));
 
     const response = await axios.post(
       `${API_BASE_URL}/chat/completions`,
@@ -158,10 +159,10 @@ async function processOCR(imagePath, customPrompt = '', model = null, provider =
       }
     );
 
-    console.log('API response received');
+    logger.debug('API response received');
     return response.data.choices[0].message.content || '';
   } catch (error) {
-    console.error('API Error:', error.response?.data || error.message);
+    logger.error('API Error:', error.response?.data || error.message);
 
     if (error.response?.status === 401) {
       throw new Error('API密钥无效，请检查DEEPSEEK_API_KEY');

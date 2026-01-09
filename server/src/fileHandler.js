@@ -1,9 +1,10 @@
 const fs = require('fs');
 const path = require('path');
 const { processOCR, postProcessDocument } = require('./ocrService');
+const logger = require('./logger');
 
 async function handlePDFUpload(filePath, customPrompt, model, provider, onProgress = null) {
-  console.log('Processing PDF: converting each page to image for OCR');
+  logger.info('Processing PDF: converting each page to image for OCR');
 
   try {
     const { convertPDFToImages } = require('./pdfUtils');
@@ -15,7 +16,7 @@ async function handlePDFUpload(filePath, customPrompt, model, provider, onProgre
 
     const pageContents = [];
     for (let i = 0; i < imagePaths.length; i++) {
-      console.log(`Processing page ${i + 1}/${imagePaths.length}`);
+      logger.debug(`Processing page ${i + 1}/${imagePaths.length}`);
 
       if (onProgress) {
         onProgress({ type: 'progress', current: i + 1, total: imagePaths.length, status: 'ocr' });
@@ -48,10 +49,10 @@ async function handlePDFUpload(filePath, customPrompt, model, provider, onProgre
     }
 
     // 延时 3 秒，避免 API 限流
-    console.log('Waiting 3 seconds before post-processing to avoid rate limiting...');
+    logger.debug('Waiting 3 seconds before post-processing to avoid rate limiting...');
     await new Promise(resolve => setTimeout(resolve, 3000));
 
-    console.log('Starting AI post-processing...');
+    logger.info('Starting AI post-processing...');
     const finalMarkdown = await postProcessDocument(rawMarkdown);
 
     if (fs.existsSync(filePath)) {
@@ -60,7 +61,7 @@ async function handlePDFUpload(filePath, customPrompt, model, provider, onProgre
 
     return finalMarkdown;
   } catch (error) {
-    console.error('PDF processing failed:', error);
+    logger.error('PDF processing failed:', error);
     throw new Error(`PDF处理失败: ${error.message}`);
   }
 }
@@ -73,7 +74,7 @@ async function handleImageUpload(filePath, customPrompt, model, provider) {
 
     return markdownContent;
   } catch (error) {
-    console.error('Error processing image:', error);
+    logger.error('Error processing image:', error);
     throw error;
   }
 }

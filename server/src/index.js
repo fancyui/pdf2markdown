@@ -7,6 +7,7 @@ const fs = require('fs');
 const { processOCR } = require('./ocrService');
 const { handlePDFUpload, handleImageUpload } = require('./fileHandler');
 const { DEFAULT_PROMPT } = require('./config');
+const logger = require('./logger');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -46,7 +47,7 @@ app.post('/api/convert/pdf', upload.single('file'), async (req, res) => {
 
     res.json({ success: true, markdown: result });
   } catch (error) {
-    console.error('Error processing PDF:', error);
+    logger.error('Error processing PDF:', error);
     res.status(500).json({ error: error.message });
   }
 });
@@ -73,7 +74,7 @@ app.post('/api/convert/pdf-stream', upload.single('file'), async (req, res) => {
     res.write(JSON.stringify({ success: true, markdown: result }) + '\n');
     res.end();
   } catch (error) {
-    console.error('Error processing PDF stream:', error);
+    logger.error('Error processing PDF stream:', error);
     res.write(JSON.stringify({ error: error.message }) + '\n');
     res.end();
   }
@@ -91,7 +92,7 @@ app.post('/api/convert/image', upload.single('file'), async (req, res) => {
 
     res.json({ success: true, markdown: result });
   } catch (error) {
-    console.error('Error processing image:', error);
+    logger.error('Error processing image:', error);
     res.status(500).json({ error: error.message });
   }
 });
@@ -109,7 +110,7 @@ app.post('/api/convert/image-url', async (req, res) => {
 
     res.json({ success: true, markdown: result });
   } catch (error) {
-    console.error('Error processing image URL:', error);
+    logger.error('Error processing image URL:', error);
     res.status(500).json({ error: error.message });
   }
 });
@@ -119,8 +120,8 @@ app.get('/api/health', (req, res) => {
 });
 
 const server = app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
-  console.log(`Health check: http://localhost:${PORT}/api/health`);
+  logger.always(`Server running on port ${PORT}`);
+  logger.always(`Health check: http://localhost:${PORT}/api/health`);
 });
 
 // Set server timeout to 1 hour (3600000 ms)
