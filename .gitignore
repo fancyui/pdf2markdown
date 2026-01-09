@@ -41,3 +41,7 @@ temp_images/
 
 # Misc
 .cache/
+*-lock.json
+client/package-lock.json
+server/package-lock.json
+server/node_modules

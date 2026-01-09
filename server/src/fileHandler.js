@@ -9,20 +9,28 @@ async function handlePDFUpload(filePath, customPrompt, model, provider) {
     const { convertPDFToImages } = require('./pdfUtils');
     const imagePaths = await convertPDFToImages(filePath);
 
-    let markdownContent = `# PDF 文档 (OCR识别)\n\n`;
-    markdownContent += `**总页数**: ${imagePaths.length}\n\n`;
-    markdownContent += `---\n\n`;
-
+    const pageContents = [];
     for (let i = 0; i < imagePaths.length; i++) {
       console.log(`Processing page ${i + 1}/${imagePaths.length}`);
 
       const pageContent = await processOCR(imagePaths[i], customPrompt, model, provider);
-      markdownContent += `## 第 ${i + 1} 页\n\n${pageContent}\n\n`;
+      pageContents.push(pageContent);
 
       if (fs.existsSync(imagePaths[i])) {
         fs.unlinkSync(imagePaths[i]);
       }
     }
+
+    const { mergeTablesAcrossPages } = require('./tableUtils');
+    const mergedPages = mergeTablesAcrossPages(pageContents);
+
+    let markdownContent = `# PDF 文档 (OCR识别)\n\n`;
+    markdownContent += `**总页数**: ${imagePaths.length}\n\n`;
+    markdownContent += `---\n\n`;
+
+    mergedPages.forEach((content, i) => {
+      markdownContent += `## 第 ${i + 1} 页\n\n${content}\n\n`;
+    });
 
     if (fs.existsSync(filePath)) {
       fs.unlinkSync(filePath);
