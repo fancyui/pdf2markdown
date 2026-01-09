@@ -16,13 +16,61 @@ export const convertFile = async (file, type, prompt = '', model = '', provider 
       headers: {
         'Content-Type': 'multipart/form-data',
       },
-      timeout: 300000,
+      timeout: 3600000,
     });
 
     return response.data;
   } catch (error) {
     console.error('API Error:', error);
     throw new Error(error.response?.data?.error || 'API request failed');
+  }
+};
+
+export const convertFileStream = async (file, type, prompt = '', model = '', provider = 'novita', onStatus) => {
+  if (type !== 'pdf') {
+    return convertFile(file, type, prompt, model, provider);
+  }
+
+  const formData = new FormData();
+  formData.append('file', file);
+  formData.append('prompt', prompt);
+  formData.append('model', model);
+  formData.append('provider', provider);
+
+  try {
+    const response = await fetch(`${API_BASE_URL}/convert/pdf-stream`, {
+      method: 'POST',
+      body: formData,
+    });
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop();
+
+      for (const line of lines) {
+        if (line.trim()) {
+          const data = JSON.parse(line);
+          if (data.type === 'progress') {
+            onStatus(data);
+          } else if (data.success) {
+            return data;
+          } else if (data.error) {
+            throw new Error(data.error);
+          }
+        }
+      }
+    }
+  } catch (error) {
+    console.error('Stream Error:', error);
+    throw error;
   }
 };
 

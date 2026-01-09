@@ -51,6 +51,34 @@ app.post('/api/convert/pdf', upload.single('file'), async (req, res) => {
   }
 });
 
+// Streaming version for progress updates
+app.post('/api/convert/pdf-stream', upload.single('file'), async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ error: 'No file uploaded' });
+    }
+
+    const customPrompt = req.body.prompt || '';
+    const { model, provider } = req.body;
+
+    res.setHeader('Content-Type', 'application/json');
+    res.setHeader('Transfer-Encoding', 'chunked');
+
+    const onProgress = (data) => {
+      res.write(JSON.stringify(data) + '\n');
+    };
+
+    const result = await handlePDFUpload(req.file.path, customPrompt, model, provider, onProgress);
+
+    res.write(JSON.stringify({ success: true, markdown: result }) + '\n');
+    res.end();
+  } catch (error) {
+    console.error('Error processing PDF stream:', error);
+    res.write(JSON.stringify({ error: error.message }) + '\n');
+    res.end();
+  }
+});
+
 app.post('/api/convert/image', upload.single('file'), async (req, res) => {
   try {
     if (!req.file) {
@@ -90,7 +118,11 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', message: 'Server is running' });
 });
 
-app.listen(PORT, () => {
+const server = app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
   console.log(`Health check: http://localhost:${PORT}/api/health`);
 });
+
+// Set server timeout to 1 hour (3600000 ms)
+server.timeout = 3600000;
+

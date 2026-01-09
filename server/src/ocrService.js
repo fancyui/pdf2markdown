@@ -1,5 +1,67 @@
 const axios = require('axios');
-const { DEFAULT_PROMPT, PROVIDERS, MAX_TOKENS, TEMPERATURE, TOP_P } = require('./config');
+const {
+  DEFAULT_PROMPT,
+  PROVIDERS,
+  MAX_TOKENS,
+  TEMPERATURE,
+  TOP_P,
+  POST_PROCESS_PROMPT,
+  POST_PROCESS_MODEL,
+  POST_PROCESS_PROVIDER
+} = require('./config');
+
+async function postProcessDocument(rawMarkdown) {
+  const API_KEY = process.env.OPENROUTER_API_KEY;
+  const API_BASE_URL = 'https://openrouter.ai/api/v1';
+  const API_MODEL = POST_PROCESS_MODEL;
+
+  if (!API_KEY) {
+    console.warn('OPENROUTER_API_KEY not set, skipping post-processing');
+    return rawMarkdown;
+  }
+
+  try {
+    console.log('Starting AI post-processing with model:', API_MODEL);
+
+    const requestData = {
+      model: API_MODEL,
+      messages: [
+        {
+          role: "system",
+          content: "你是一个专业的文档审校专家，擅长清理和优化 OCR 输出的文档。"
+        },
+        {
+          role: "user",
+          content: POST_PROCESS_PROMPT + "\n\n---\n\n以下是需要处理的文档：\n\n" + rawMarkdown
+        }
+      ],
+      max_tokens: MAX_TOKENS,
+      temperature: 0.2,
+      top_p: TOP_P,
+    };
+
+    const response = await axios.post(
+      `${API_BASE_URL}/chat/completions`,
+      requestData,
+      {
+        headers: {
+          'Authorization': `Bearer ${API_KEY}`,
+          'Content-Type': 'application/json',
+          'HTTP-Referer': 'https://github.com/daniel/pdf2markdown',
+          'X-Title': 'PDF2Markdown PostProcess'
+        },
+        timeout: 3600000
+      }
+    );
+
+    console.log('Post-processing completed');
+    return response.data.choices[0].message.content || rawMarkdown;
+  } catch (error) {
+    console.error('Post-processing error:', error.response?.data || error.message);
+    console.warn('Returning raw markdown due to post-processing failure');
+    return rawMarkdown;
+  }
+}
 
 async function processOCR(imagePath, customPrompt = '', model = null, provider = 'novita') {
   let API_KEY;
@@ -9,7 +71,7 @@ async function processOCR(imagePath, customPrompt = '', model = null, provider =
     API_KEY = process.env.OPENROUTER_API_KEY;
     API_BASE_URL = 'https://openrouter.ai/api/v1';
   } else {
-    API_KEY = process.env.DEEPSEEK_API_KEY;
+    API_KEY = process.env.NOVITA_API_KEY || process.env.DEEPSEEK_API_KEY;
     API_BASE_URL = process.env.API_BASE_URL || 'https://api.novita.ai/openai/v1';
   }
 
@@ -92,7 +154,7 @@ async function processOCR(imagePath, customPrompt = '', model = null, provider =
             'X-Title': 'PDF2Markdown OCR'
           })
         },
-        timeout: 300000
+        timeout: 3600000
       }
     );
 
@@ -116,4 +178,4 @@ async function processOCR(imagePath, customPrompt = '', model = null, provider =
   }
 }
 
-module.exports = { processOCR };
+module.exports = { processOCR, postProcessDocument };

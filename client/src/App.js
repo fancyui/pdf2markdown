@@ -19,7 +19,7 @@ import {
 } from '@mui/icons-material';
 import FileUpload from './components/FileUpload';
 import MarkdownPreview from './components/MarkdownPreview';
-import { convertFile } from './services/api';
+import { convertFile, convertFileStream } from './services/api';
 import { PROVIDER_MODELS, DEFAULT_PROMPT } from './config';
 
 function App() {
@@ -32,6 +32,7 @@ function App() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+  const [progress, setProgress] = useState(null); // { current, total, status }
 
   const handleProviderChange = (e) => {
     const provider = e.target.value;
@@ -47,15 +48,29 @@ function App() {
     setLoading(true);
     setError('');
     setSuccess('');
+    setProgress(null);
 
     try {
-      const result = await convertFile(file, activeTab, prompt, selectedModel, selectedProvider);
+      const onStatus = (statusData) => {
+        setProgress(statusData);
+      };
+
+      const result = await convertFileStream(
+        file,
+        activeTab,
+        prompt,
+        selectedModel,
+        selectedProvider,
+        onStatus
+      );
+
       setMarkdown(result.markdown);
       setSuccess('转换成功！');
     } catch (err) {
       setError(err.message || '转换失败，请重试');
     } finally {
       setLoading(false);
+      setProgress(null);
     }
   };
 
@@ -228,8 +243,16 @@ function App() {
         )}
 
         {loading && (
-          <Box sx={{ display: 'flex', justifyContent: 'center', mt: 3 }}>
+          <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', mt: 3, gap: 2 }}>
             <CircularProgress />
+            {progress && (
+              <Typography variant="body2" color="text.secondary">
+                {progress.status === 'splitting' && '正在对 PDF 进行分页...'}
+                {progress.status === 'ocr' && `正在识别第 ${progress.current} 页 / 共 ${progress.total} 页...`}
+                {progress.status === 'merging' && '正在合并页面...'}
+                {progress.status === 'postprocess' && '正在进行 AI 审校（去除页眉页脚、合并跨页表格）...'}
+              </Typography>
+            )}
           </Box>
         )}
 
