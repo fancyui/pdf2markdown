@@ -178,12 +178,12 @@ Proofread, clean up, and optimize the OCR output to produce a clean, complete, a
             models: [
                 'google/gemini-3-flash-preview',
                 'x-ai/grok-4.1-fast',
-                'x-ai/grok-4-fast',
+                'qwen/qwen3-vl-32b-instruct',
                 'openai/gpt-5-mini'
             ]
         }
     },
-    MAX_TOKENS: 100000,
+    MAX_TOKENS: 128000,
     TEMPERATURE: 0.3,
     TOP_P: 1
 };
