@@ -167,23 +167,23 @@ Proofread, clean up, and optimize the OCR output to produce a clean, complete, a
     PROVIDERS: {
         novita: {
             default: 'qwen/qwen3-vl-235b-a22b-instruct',
-            models: [
-                'qwen/qwen3-vl-235b-a22b-instruct',
-                'paddlepaddle/paddleocr-vl',
-                'deepseek/deepseek-ocr'
-            ]
+            models: {
+                'qwen/qwen3-vl-235b-a22b-instruct': { maxTokens: 32768 },
+                'paddlepaddle/paddleocr-vl': { maxTokens: 16384 },
+                'deepseek/deepseek-ocr': { maxTokens: 8192 }
+            }
         },
         openrouter: {
             default: 'google/gemini-3-flash-preview',
-            models: [
-                'google/gemini-3-flash-preview',
-                'x-ai/grok-4.1-fast',
-                'qwen/qwen3-vl-32b-instruct',
-                'openai/gpt-5-mini'
-            ]
+            models: {
+                'google/gemini-3-flash-preview': { maxTokens: 500000 },
+                'x-ai/grok-4.1-fast': { maxTokens: 32768 },
+                'qwen/qwen3-vl-32b-instruct': { maxTokens: 32768 },
+                'openai/gpt-5-mini': { maxTokens: 65536 }
+            }
         }
     },
-    MAX_TOKENS: 128000,
+    DEFAULT_MAX_TOKENS: 500000,
     TEMPERATURE: 0.3,
     TOP_P: 1
 };

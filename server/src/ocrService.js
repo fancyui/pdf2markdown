@@ -2,7 +2,7 @@ const axios = require('axios');
 const {
   DEFAULT_PROMPT,
   PROVIDERS,
-  MAX_TOKENS,
+  DEFAULT_MAX_TOKENS,
   TEMPERATURE,
   TOP_P,
   POST_PROCESS_PROMPT,
@@ -36,7 +36,7 @@ async function postProcessDocument(rawMarkdown) {
           content: POST_PROCESS_PROMPT + "\n\n---\n\n以下是需要处理的文档：\n\n" + rawMarkdown
         }
       ],
-      max_tokens: MAX_TOKENS,
+      max_tokens: DEFAULT_MAX_TOKENS,
       temperature: 0.2,
       top_p: TOP_P,
     };
@@ -78,6 +78,12 @@ async function processOCR(imagePath, customPrompt = '', model = null, provider =
 
   const providerConfig = PROVIDERS[provider] || PROVIDERS.novita;
   const API_MODEL = model || (provider === 'novita' ? (process.env.API_MODEL || providerConfig.default) : providerConfig.default);
+
+  // Get model-specific maxTokens or use default
+  const modelConfig = providerConfig.models[API_MODEL];
+  const maxTokens = modelConfig?.maxTokens || DEFAULT_MAX_TOKENS;
+
+  logger.info(`Using model: ${API_MODEL}, maxTokens: ${maxTokens}`);
 
   if (!API_KEY) {
     throw new Error(`${provider.toUpperCase()}_API_KEY is not set in environment variables`);
@@ -136,7 +142,7 @@ async function processOCR(imagePath, customPrompt = '', model = null, provider =
           content: userContent
         }
       ],
-      max_tokens: MAX_TOKENS,
+      max_tokens: maxTokens,
       temperature: TEMPERATURE,
       top_p: TOP_P,
     };
