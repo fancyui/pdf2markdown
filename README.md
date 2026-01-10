@@ -1,88 +1,112 @@
-# PDF/Image to Markdown Converter
+# 智能文档转换器
 
-使用 DeepSeek OCR 模型（通过 Novita AI）将 PDF 或图片文件转换为 Markdown 格式。
+使用 AI OCR 将 PDF 和图片转换为 Markdown、HTML 或纯文本格式。
 
-## 技术栈
+## ✨ 功能特性
 
-- 前端: React + Material-UI (MUI)
-- 后端: Node.js + Express
-- PDF处理: pdf-poppler
-- OCR: DeepSeek OCR API (通过 Novita AI)
+- **多格式输出**：支持 Markdown、HTML、纯文本三种输出格式
+- **多 AI 提供商**：支持 Novita AI 和 OpenRouter 多种模型
+- **并行处理**：多页 PDF 并行 OCR，大幅提升处理速度
+- **智能重试**：失败自动重试，指数退避策略
+- **AI 后处理**：自动去除页眉页脚、合并跨页表格
+- **自定义追加**：可在文档末尾追加品牌信息
+- **简单认证**：支持 Token 访问控制
+- **提示词分离**：提示词存储在独立 .md 文件中，便于管理
 
-## 功能特性
+## 🛠 技术栈
 
-- 支持上传 PDF 文件和图片文件
-- PDF每页转换为图片进行OCR识别
-- 多页 PDF 合并为单个 Markdown 文件
-- 自定义 OCR 提示词
-- 本地运行，无需云存储
-- 实时预览和下载 Markdown 文件
+- **前端**: React + Material-UI
+- **后端**: Node.js + Express
+- **PDF处理**: pdftoimg-js (纯 JS，无需系统依赖)
+- **OCR**: 支持 Novita AI / OpenRouter 多种模型
 
-## 工作原理
+## 📦 安装
 
-### PDF 处理流程
-1. 上传 PDF 文件
-2. 使用 pdf-poppler 将每一页转换为高分辨率图片
-3. 逐页发送图片到 DeepSeek OCR API
-4. 合并所有页面的识别结果为 Markdown
-5. 返回完整的 Markdown 文件
-
-### 图片处理流程
-1. 上传图片文件（PNG、JPG等）
-2. 直接发送到 DeepSeek OCR API
-3. 返回识别的 Markdown 内容
-
-## 安装
-
-### 后端设置
+### 后端
 
 ```bash
 cd server
 npm install
+cp .env.example .env
+# 编辑 .env 填入你的 API 密钥
 ```
 
-创建 `.env` 文件:
-```
-DEEPSEEK_API_KEY=your_api_key_here
-API_BASE_URL=https://api.novita.ai/openai
-API_MODEL=deepseek/deepseek-ocr
-PORT=3001
-```
-
-### 前端设置
+### 前端
 
 ```bash
 cd client
 npm install
 ```
 
-## 运行
+## ⚙️ 配置
 
-### 同时启动前后端（推荐）
-```bash
-npm run dev
+编辑 `server/.env`：
+
+```env
+# API 密钥 (必需)
+NOVITA_API_KEY=your_novita_api_key
+OPENROUTER_API_KEY=your_openrouter_api_key
+
+# 服务配置
+PORT=3001
+
+# 日志级别: debug | info | warn | error | silent
+LOG_LEVEL=info
+
+# OCR 并发配置
+OCR_CONCURRENCY=3      # 同时处理页数
+OCR_MAX_RETRIES=3      # 最大重试次数
+OCR_RETRY_DELAY=2000   # 重试延时 (ms)
+
+# 访问控制 (留空则不启用)
+ACCESS_TOKEN=your-secret-token
 ```
 
-### 分别启动
+## 🚀 运行
+
 ```bash
-cd server && npm run dev
+# 启动后端
+cd server && npm start
+
+# 启动前端 (另一个终端)
 cd client && npm start
 ```
 
-访问 http://localhost:3002
+访问 <http://localhost:3002>
 
-## 环境变量
+如启用了 ACCESS_TOKEN，需带 token 访问：
 
-- `DEEPSEEK_API_KEY`: API 密钥 (必需，从 Novita AI 获取)
-- `API_BASE_URL`: API 基础 URL (默认: https://api.novita.ai/openai)
-- `API_MODEL`: OCR 模型名称 (默认: deepseek/deepseek-ocr)
-- `PORT`: 后端服务器端口 (默认: 3001)
+```
+http://localhost:3002?token=your-secret-token
+```
 
-## 获取 API 密钥
+## 📁 项目结构
 
-1. 访问 [Novita AI](https://novita.ai)
-2. 注册并登录
-3. 在控制台获取 API 密钥
-4. 将密钥填入 server/.env 文件
+```
+pdf2markdown/
+├── client/                 # React 前端
+│   └── src/
+│       ├── App.js          # 主应用组件
+│       └── config.js       # 模型配置 & 追加内容
+├── server/                 # Express 后端
+│   └── src/
+│       ├── index.js        # 服务入口
+│       ├── config.js       # 加载提示词
+│       ├── ocrService.js   # OCR API 调用
+│       ├── fileHandler.js  # 文件处理 & 并发控制
+│       └── logger.js       # 日志工具
+└── prompts/                # 提示词文件 (可自定义)
+    ├── markdown.md         # Markdown 格式提示词
+    ├── html.md             # HTML 格式提示词
+    ├── text.md             # 纯文本格式提示词
+    ├── post-process.md     # AI 后处理提示词
+    └── append-content.md   # 末尾追加内容模板
+```
 
-详细安装说明请参考 [SETUP.md](SETUP.md)
+## 🔧 自定义提示词
+
+直接编辑 `/prompts/` 目录下的 `.md` 文件，重启服务器后生效。
+
+## 📄 License
+
+MIT

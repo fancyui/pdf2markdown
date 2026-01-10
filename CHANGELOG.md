@@ -1,93 +1,69 @@
-# 更新说明
+# 更新日志
 
-## v1.1 - PDF处理方式更新
+## v2.0 - 2026-01-10
 
-### 主要变更
+### 🆕 新功能
 
-#### PDF处理流程更新
-现在PDF文件会**强制将每一页转换为图片**发送给OCR API，不再尝试直接提取文本。
+- **多格式输出**：支持 Markdown、HTML、纯文本三种输出格式
+- **多 AI 提供商**：支持 Novita AI 和 OpenRouter，可选多种模型
+- **并行 OCR 处理**：多页 PDF 并行处理，大幅提升速度
+- **智能重试**：失败自动重试，指数退避策略
+- **AI 后处理**：自动去除页眉页脚、合并跨页表格
+- **末尾追加内容**：可选在文档末尾追加自定义内容，带开关控制
+- **Token 认证**：简单的访问控制，防止未授权使用
+- **提示词分离**：所有提示词存储在独立 .md 文件中，便于管理
 
-**原因：**
-- 直接文本提取无法处理扫描版PDF
-- 图片方式能获得更一致的识别效果
-- 更好地保留格式和布局信息
+### 🔧 技术改进
 
-**技术实现：**
-- 使用 `pdf-poppler` 替代原有的 `pdf-parse`
-- 每页转换为 2048x2048 高分辨率PNG图片
-- 逐页发送给 DeepSeek OCR API
-- 所有页面结果合并为一个Markdown文件
+- **PDF 处理**：从 pdf-poppler 迁移到 pdftoimg-js，无需系统依赖
+- **日志系统**：新增可配置的日志级别 (debug/info/warn/error/silent)
+- **配置分离**：提示词从代码中分离到 `/prompts/` 目录
 
-### 安装更新
+### ⚙️ 配置变更
 
-如果已经安装过旧版本，需要重新安装依赖：
-
-```bash
-cd server
-rm -rf node_modules package-lock.json
-npm install
-```
-
-### 环境变量更新
-
-`.env` 文件新增以下配置：
+新增环境变量：
 
 ```env
-API_BASE_URL=https://api.novita.ai/openai
-API_MODEL=deepseek/deepseek-ocr
+OPENROUTER_API_KEY=...     # OpenRouter API 密钥
+LOG_LEVEL=info             # 日志级别
+OCR_CONCURRENCY=3          # 并发处理页数
+OCR_MAX_RETRIES=3          # 最大重试次数
+OCR_RETRY_DELAY=2000       # 重试延时 (ms)
+ACCESS_TOKEN=              # 访问控制令牌
 ```
 
-### 处理时间说明
+变更：
 
-多页PDF的处理时间计算：
+- `DEEPSEEK_API_KEY` → `NOVITA_API_KEY`
+
+### 📁 文件结构
+
+新增目录：
+
 ```
-总时间 = (页面数 × 图片转换时间) + (页面数 × API响应时间)
+/prompts/
+├── markdown.md      # Markdown 格式 OCR 提示词
+├── html.md          # HTML 格式 OCR 提示词
+├── text.md          # 纯文本格式 OCR 提示词
+├── post-process.md  # AI 后处理提示词
+└── append-content.md # 末尾追加内容模板
 ```
-
-示例：
-- 10页PDF
-- 图片转换：约2秒/页
-- API响应：约5-10秒/页
-- 总计：约70-120秒
-
-### 性能优化建议
-
-1. **减少不必要的转换**：如果PDF已经是文本格式，建议使用其他工具直接转换
-2. **批量处理**：对于大量文件，考虑分批处理
-3. **API配额**：注意监控API使用量，避免超出配额
-
-### 输出格式
-
-转换后的Markdown文件格式：
-
-```markdown
-# PDF 文档 (OCR识别)
-
-**总页数**: N
 
 ---
 
-## 第 1 页
+## v1.1 - PDF 处理方式更新
 
-[页面1的识别内容]
+### 主要变更
 
-## 第 2 页
+- PDF 强制转换为图片进行 OCR，不再尝试直接提取文本
+- 使用 pdf-poppler 将每页转换为 2048x2048 高分辨率图片
+- 支持扫描版 PDF
 
-[页面2的识别内容]
+---
 
-...
-```
+## v1.0 - 初始版本
 
-### 常见问题
-
-**Q: 为什么PDF处理变慢了？**
-A: 因为现在每页都需要转换为图片并进行OCR识别，这是获得更好识别效果的必要步骤。
-
-**Q: 可以跳过某些页面吗？**
-A: 当前版本不支持，后续可能会添加页面范围选择功能。
-
-**Q: 图片质量如何保证？**
-A: 使用2048x2048分辨率，保证文字清晰度，提高识别准确率。
-
-**Q: 处理失败怎么办？**
-A: 检查API密钥、网络连接和磁盘空间，查看后端日志获取详细错误信息。
+- 基本的 PDF/图片 OCR 转换功能
+- React + Material-UI 前端
+- Node.js + Express 后端
+- DeepSeek OCR API 支持

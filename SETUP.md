@@ -2,7 +2,7 @@
 
 ## 环境要求
 
-- Node.js (v14 或更高版本)
+- Node.js v16+
 - npm 或 yarn
 
 ## 安装步骤
@@ -10,9 +10,6 @@
 ### 1. 安装依赖
 
 ```bash
-# 安装根目录依赖
-npm install
-
 # 安装后端依赖
 cd server && npm install
 
@@ -22,74 +19,88 @@ cd ../client && npm install
 
 ### 2. 配置环境变量
 
-在 `server` 目录下创建 `.env` 文件：
-
 ```bash
 cd server
 cp .env.example .env
 ```
 
-编辑 `.env` 文件，填入你的 Novita AI API 密钥：
+编辑 `server/.env`：
 
-```
-DEEPSEEK_API_KEY=your_actual_api_key_here
-API_BASE_URL=https://api.novita.ai/openai
-API_MODEL=deepseek/deepseek-ocr
+```env
+# API 密钥 (至少配置一个)
+NOVITA_API_KEY=your_novita_api_key
+OPENROUTER_API_KEY=your_openrouter_api_key
+
+# 服务配置
 PORT=3001
+LOG_LEVEL=info
+
+# OCR 并发配置
+OCR_CONCURRENCY=3
+OCR_MAX_RETRIES=3
+OCR_RETRY_DELAY=2000
+
+# 访问控制 (可选，留空则不启用)
+ACCESS_TOKEN=
 ```
 
 ### 3. 启动服务
 
-#### 方式一：同时启动前后端（推荐）
-
-```bash
-# 在项目根目录
-npm run dev
-```
-
-#### 方式二：分别启动
-
 ```bash
 # 终端1：启动后端
-cd server
-npm run dev
+cd server && npm start
 
 # 终端2：启动前端
-cd client
-npm start
+cd client && npm start
 ```
 
 ### 4. 访问应用
 
-打开浏览器访问：http://localhost:3002
+- 本地开发：<http://localhost:3002>
+- 带 Token：<http://localhost:3002?token=your-token>
 
-## PDF处理说明
+## 处理流程
 
-系统会将PDF的每一页转换为图片，然后发送给OCR API进行识别：
+### PDF 处理
 
-1. 使用 `pdf-poppler` 将PDF每页转换为高分辨率PNG图片
-2. 每页图片独立发送给 DeepSeek OCR API
-3. 所有页面的识别结果合并为一个Markdown文件
-4. 识别结果按页码顺序排列
+1. PDF 分页转换为高清图片 (pdftoimg-js)
+2. 多页并行发送到 AI OCR API
+3. 失败自动重试 (指数退避)
+4. 合并所有页面结果
+5. AI 后处理 (去页眉页脚、合并跨页表格)
+6. 可选追加末尾内容
 
-## 使用说明
+### 图片处理
 
-1. 选择文件类型（PDF 或 图片）
-2. 拖拽文件到上传区域或点击选择文件
-3. （可选）输入自定义提示词
-4. 等待处理完成
-5. 预览和下载 Markdown 文件
+1. 直接发送到 AI OCR API
+2. 返回指定格式 (Markdown/HTML/纯文本)
+
+## 自定义提示词
+
+编辑 `/prompts/` 目录下的文件：
+
+- `markdown.md` - Markdown 格式提示词
+- `html.md` - HTML 格式提示词
+- `text.md` - 纯文本格式提示词
+- `post-process.md` - AI 后处理提示词
+- `append-content.md` - 末尾追加内容模板
+
+修改后重启服务器生效。
 
 ## 常见问题
 
-### Q: 提示 "DEEPSEEK_API_KEY is not set"
-A: 请确保在 server/.env 文件中正确配置了 API 密钥
+### Q: 提示 "API_KEY is not set"
 
-### Q: PDF 处理失败
-A: 检查是否有足够的磁盘空间，确保安装了所有依赖
+A: 请确保在 `server/.env` 中配置了对应提供商的 API 密钥
 
-### Q: 上传文件大小限制
-A: 默认最大支持50MB的文件，可在server/src/index.js中修改
+### Q: 401 未授权访问
+
+A: 设置了 ACCESS_TOKEN 后，需要在 URL 中加 `?token=xxx`
 
 ### Q: 转换速度慢
-A: 多页PDF需要逐页转换和识别，请耐心等待。处理时间取决于PDF页数和API响应速度
+
+A: 调整 `OCR_CONCURRENCY` 增加并发数 (注意 API 限速)
+
+### Q: 大文件处理失败
+
+A: 检查磁盘空间，可调整 `server/src/index.js` 中的文件大小限制
