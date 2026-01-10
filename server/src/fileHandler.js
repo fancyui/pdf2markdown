@@ -14,20 +14,34 @@ async function handlePDFUpload(filePath, customPrompt, model, provider, onProgre
       onProgress({ type: 'progress', current: 0, total: imagePaths.length, status: 'splitting' });
     }
 
-    const pageContents = [];
-    for (let i = 0; i < imagePaths.length; i++) {
-      logger.debug(`Processing page ${i + 1}/${imagePaths.length}`);
+    // Parallel processing with concurrency limit
+    const CONCURRENCY = parseInt(process.env.OCR_CONCURRENCY) || 3;
+    const pageContents = new Array(imagePaths.length);
+    let completedCount = 0;
 
+    // Process pages in parallel with concurrency limit
+    const processPage = async (index) => {
+      logger.debug(`Processing page ${index + 1}/${imagePaths.length}`);
+      const content = await processOCR(imagePaths[index], customPrompt, model, provider);
+      pageContents[index] = content;
+
+      completedCount++;
       if (onProgress) {
-        onProgress({ type: 'progress', current: i + 1, total: imagePaths.length, status: 'ocr' });
+        onProgress({ type: 'progress', current: completedCount, total: imagePaths.length, status: 'ocr' });
       }
 
-      const pageContent = await processOCR(imagePaths[i], customPrompt, model, provider);
-      pageContents.push(pageContent);
-
-      if (fs.existsSync(imagePaths[i])) {
-        fs.unlinkSync(imagePaths[i]);
+      if (fs.existsSync(imagePaths[index])) {
+        fs.unlinkSync(imagePaths[index]);
       }
+    };
+
+    // Process in batches with concurrency limit
+    for (let i = 0; i < imagePaths.length; i += CONCURRENCY) {
+      const batch = [];
+      for (let j = i; j < Math.min(i + CONCURRENCY, imagePaths.length); j++) {
+        batch.push(processPage(j));
+      }
+      await Promise.all(batch);
     }
 
     if (onProgress) {
