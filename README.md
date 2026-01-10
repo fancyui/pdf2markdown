@@ -62,6 +62,33 @@ OCR_RETRY_DELAY=2000   # 重试延时 (ms)
 ACCESS_TOKEN=your-secret-token
 ```
 
+Nginx 配置示例：
+
+```nginx
+server {
+    # ... 其他配置 ...
+
+    location / {
+        proxy_pass http://127.0.0.1:5003;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        
+        # 增加超时时间 (单位：秒)
+        proxy_connect_timeout 3600;
+        proxy_send_timeout 3600;
+        proxy_read_timeout 3600;
+        send_timeout 3600;
+        
+        # 关闭缓冲，支持流式响应 (显示进度)
+        proxy_buffering off;
+        proxy_cache off;
+    }
+}
+
 ## 🚀 运行
 
 ```bash
