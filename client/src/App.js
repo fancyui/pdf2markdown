@@ -38,6 +38,7 @@ function App() {
   const [appendContent, setAppendContent] = useState(DEFAULT_APPEND_CONTENT.trim()); // Content to append at end of PDF
   const [outputFormat, setOutputFormat] = useState('markdown'); // markdown | html | text
   const [enableAppend, setEnableAppend] = useState(false); // Enable/disable append content
+  const [enablePostProcess, setEnablePostProcess] = useState(false); // Enable/disable AI post-processing
 
   const handleProviderChange = (e) => {
     const provider = e.target.value;
@@ -68,7 +69,8 @@ function App() {
         selectedProvider,
         onStatus,
         enableAppend ? appendContent : '',
-        outputFormat
+        outputFormat,
+        enablePostProcess
       );
 
       setMarkdown(result.markdown);
@@ -254,6 +256,15 @@ function App() {
                   rows={6}
                 />
               )}
+              <FormControlLabel
+                control={
+                  <Switch
+                    checked={enablePostProcess}
+                    onChange={(e) => setEnablePostProcess(e.target.checked)}
+                  />
+                }
+                label="AI 后处理（去页眉页脚、合并跨页表格）"
+              />
             </Box>
           )}
         </Box>
