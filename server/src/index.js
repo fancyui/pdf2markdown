@@ -110,9 +110,9 @@ app.post('/api/convert/image', upload.single('file'), async (req, res) => {
       return res.status(400).json({ error: 'No file uploaded' });
     }
 
-    const customPrompt = req.body.prompt || DEFAULT_PROMPT;
-    const { model, provider } = req.body;
-    const result = await handleImageUpload(req.file.path, customPrompt, model, provider);
+    const customPrompt = req.body.prompt || '';
+    const { model, provider, outputFormat } = req.body;
+    const result = await handleImageUpload(req.file.path, customPrompt, model, provider, outputFormat);
 
     res.json({ success: true, markdown: result });
   } catch (error) {
@@ -123,14 +123,14 @@ app.post('/api/convert/image', upload.single('file'), async (req, res) => {
 
 app.post('/api/convert/image-url', async (req, res) => {
   try {
-    const { imageUrl, prompt, model, provider } = req.body;
+    const { imageUrl, prompt, model, provider, outputFormat } = req.body;
 
     if (!imageUrl) {
       return res.status(400).json({ error: 'No image URL provided' });
     }
 
-    const customPrompt = prompt || DEFAULT_PROMPT;
-    const result = await processOCR(imageUrl, customPrompt, model, provider);
+    const customPrompt = prompt || '';
+    const result = await processOCR(imageUrl, customPrompt, model, provider, outputFormat);
 
     res.json({ success: true, markdown: result });
   } catch (error) {

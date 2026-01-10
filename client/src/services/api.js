@@ -8,12 +8,13 @@ const getToken = () => {
   return urlParams.get('token') || '';
 };
 
-export const convertFile = async (file, type, prompt = '', model = '', provider = 'novita') => {
+export const convertFile = async (file, type, prompt = '', model = '', provider = 'novita', outputFormat = 'markdown') => {
   const formData = new FormData();
   formData.append('file', file);
   formData.append('prompt', prompt);
   formData.append('model', model);
   formData.append('provider', provider);
+  formData.append('outputFormat', outputFormat);
 
   const endpoint = type === 'pdf' ? '/convert/pdf' : '/convert/image';
   const token = getToken();
