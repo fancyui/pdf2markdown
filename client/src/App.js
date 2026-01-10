@@ -92,7 +92,9 @@ function App() {
     setSuccess('');
 
     try {
-      const response = await fetch('http://localhost:3001/api/convert/image-url', {
+      const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:3001/api';
+      const token = new URLSearchParams(window.location.search).get('token') || '';
+      const response = await fetch(`${API_BASE_URL}/convert/image-url${token ? `?token=${token}` : ''}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
