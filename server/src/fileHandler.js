@@ -3,7 +3,7 @@ const path = require('path');
 const { processOCR, postProcessDocument } = require('./ocrService');
 const logger = require('./logger');
 
-async function handlePDFUpload(filePath, customPrompt, model, provider, onProgress = null, appendContent = '', outputFormat = 'markdown') {
+async function handlePDFUpload(filePath, customPrompt, model, provider, onProgress = null, appendContent = '', outputFormat = 'markdown', enablePostProcess = false) {
   logger.info('Processing PDF: converting each page to image for OCR');
 
   try {
@@ -106,17 +106,23 @@ async function handlePDFUpload(filePath, customPrompt, model, provider, onProgre
       rawMarkdown += `## 第 ${i + 1} 页\n\n${content}\n\n`;
     });
 
-    // AI 后处理：清理页眉页脚、合并跨页表格
-    if (onProgress) {
-      onProgress({ type: 'progress', current: imagePaths.length, total: imagePaths.length, status: 'postprocess' });
+    let finalMarkdown = rawMarkdown;
+
+    // AI 后处理：清理页眉页脚、合并跨页表格 (仅在启用时执行)
+    if (enablePostProcess) {
+      if (onProgress) {
+        onProgress({ type: 'progress', current: imagePaths.length, total: imagePaths.length, status: 'postprocess' });
+      }
+
+      // 延时 3 秒，避免 API 限流
+      logger.debug('Waiting 3 seconds before post-processing to avoid rate limiting...');
+      await new Promise(resolve => setTimeout(resolve, 3000));
+
+      logger.info('Starting AI post-processing...');
+      finalMarkdown = await postProcessDocument(rawMarkdown);
+    } else {
+      logger.info('AI post-processing disabled, skipping...');
     }
-
-    // 延时 3 秒，避免 API 限流
-    logger.debug('Waiting 3 seconds before post-processing to avoid rate limiting...');
-    await new Promise(resolve => setTimeout(resolve, 3000));
-
-    logger.info('Starting AI post-processing...');
-    const finalMarkdown = await postProcessDocument(rawMarkdown);
 
     if (fs.existsSync(filePath)) {
       fs.unlinkSync(filePath);

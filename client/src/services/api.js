@@ -34,7 +34,7 @@ export const convertFile = async (file, type, prompt = '', model = '', provider 
   }
 };
 
-export const convertFileStream = async (file, type, prompt = '', model = '', provider = 'novita', onStatus, appendContent = '', outputFormat = 'markdown') => {
+export const convertFileStream = async (file, type, prompt = '', model = '', provider = 'novita', onStatus, appendContent = '', outputFormat = 'markdown', enablePostProcess = false) => {
   if (type !== 'pdf') {
     return convertFile(file, type, prompt, model, provider, outputFormat);
   }
@@ -46,6 +46,7 @@ export const convertFileStream = async (file, type, prompt = '', model = '', pro
   formData.append('provider', provider);
   formData.append('appendContent', appendContent);
   formData.append('outputFormat', outputFormat);
+  formData.append('enablePostProcess', enablePostProcess);
 
   const token = getToken();
 

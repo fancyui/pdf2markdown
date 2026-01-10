@@ -84,7 +84,7 @@ app.post('/api/convert/pdf-stream', upload.single('file'), async (req, res) => {
     }
 
     const customPrompt = req.body.prompt || '';
-    const { model, provider, appendContent, outputFormat } = req.body;
+    const { model, provider, appendContent, outputFormat, enablePostProcess } = req.body;
 
     res.setHeader('Content-Type', 'application/json');
     res.setHeader('Transfer-Encoding', 'chunked');
@@ -93,7 +93,7 @@ app.post('/api/convert/pdf-stream', upload.single('file'), async (req, res) => {
       res.write(JSON.stringify(data) + '\n');
     };
 
-    const result = await handlePDFUpload(req.file.path, customPrompt, model, provider, onProgress, appendContent, outputFormat);
+    const result = await handlePDFUpload(req.file.path, customPrompt, model, provider, onProgress, appendContent, outputFormat, enablePostProcess === 'true');
 
     res.write(JSON.stringify({ success: true, markdown: result }) + '\n');
     res.end();
