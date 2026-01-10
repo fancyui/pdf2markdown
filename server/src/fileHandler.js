@@ -135,9 +135,9 @@ async function handlePDFUpload(filePath, customPrompt, model, provider, onProgre
   }
 }
 
-async function handleImageUpload(filePath, customPrompt, model, provider) {
+async function handleImageUpload(filePath, customPrompt, model, provider, outputFormat = 'markdown') {
   try {
-    const markdownContent = await processOCR(filePath, customPrompt, model, provider);
+    const markdownContent = await processOCR(filePath, customPrompt, model, provider, outputFormat);
 
     fs.unlinkSync(filePath);
 

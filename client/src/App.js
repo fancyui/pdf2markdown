@@ -103,7 +103,8 @@ function App() {
           imageUrl,
           prompt,
           model: selectedModel,
-          provider: selectedProvider
+          provider: selectedProvider,
+          outputFormat
         }),
       });
 
