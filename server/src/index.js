@@ -1,4 +1,5 @@
-require('dotenv').config();
+const path = require('path');
+require('dotenv').config({ path: path.join(__dirname, '../.env') });
 const express = require('express');
 const cors = require('cors');
 const multer = require('multer');
@@ -17,7 +18,7 @@ app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
 // Simple token authentication middleware
-const ACCESS_TOKEN = process.env.ACCESS_TOKEN;
+const ACCESS_TOKEN = process.env.ACCESS_TOKEN?.trim();
 const authMiddleware = (req, res, next) => {
   // Skip auth if no token configured
   if (!ACCESS_TOKEN) {
@@ -25,13 +26,15 @@ const authMiddleware = (req, res, next) => {
   }
 
   // Check token in query, header, or body
-  const token = req.query.token || req.headers['x-access-token'] || req.body?.token;
+  const token = (req.query.token || req.headers['x-access-token'] || req.body?.token || '')?.trim();
+
+  logger.debug(`Auth check: received="${token}", expected="${ACCESS_TOKEN}"`);
 
   if (token === ACCESS_TOKEN) {
     return next();
   }
 
-  logger.warn(`Unauthorized access attempt from ${req.ip}`);
+  logger.warn(`Unauthorized access attempt from ${req.ip}, token: "${token}"`);
   return res.status(401).json({ error: '未授权访问，请提供有效的访问令牌' });
 };
 
