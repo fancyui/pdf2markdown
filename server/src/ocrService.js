@@ -99,7 +99,12 @@ async function processOCR(imagePath, customPrompt = '', model = null, provider =
     html: HTML_PROMPT,
     text: TEXT_PROMPT
   };
+
+  const promptSource = customPrompt ? 'custom' : `prompts/${outputFormat}.md`;
   const prompt = customPrompt || FORMAT_PROMPTS[outputFormat] || DEFAULT_PROMPT;
+
+  logger.info(`Prompt source: ${promptSource}, length: ${prompt.length} chars`);
+  logger.debug(`Prompt preview: ${prompt.substring(0, 150).replace(/\n/g, ' ')}...`);
 
   let imageUrl = null;
   let base64Image = null;
