@@ -9,7 +9,7 @@ export const PROVIDER_MODELS = {
    openrouter: [
       { value: 'google/gemini-3-flash-preview', label: 'Gemini 3 Flash Preview' },
       { value: 'x-ai/grok-4.1-fast', label: 'Grok 4.1 Fast' },
-      { value: 'qwen/qwen3-vl-32b-instruct', label: 'Qwen3 VL 32B' },
+      { value: 'qwen/qwen3-vl-235b-a22b-instruct', label: 'Qwen3 VL 235B' },
       { value: 'openai/gpt-5-mini', label: 'GPT-5 Mini' }
    ]
 };

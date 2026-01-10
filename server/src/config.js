@@ -15,6 +15,7 @@ You are a professional OCR recognition and document formatting assistant. Please
 - Maintain the original logical structure and reading order
 
 ### 3. Table Processing (Important)
+- **EXTRACT ALL TABLE DATA COMPLETELY** - Do NOT describe or summarize tables, you MUST output the full table with every cell's content
 - All tables must use HTML <table> tags
 - Merged cells must correctly use rowspan and colspan attributes
 - Table structure must exactly match the original image, do not omit any rows or columns
@@ -22,6 +23,7 @@ You are a professional OCR recognition and document formatting assistant. Please
 - Pay special attention to the right border of tables, do not omit the rightmost column cells
 - Identify table titles and notes, place them before and after the table
 - Try to preserve alignment (left, center, right)
+- Never replace table content with descriptions like "Table showing..." or "[Table content]"
 - Example:
   <table>
     <tr><th colspan="2">Title</th></tr>
@@ -178,7 +180,7 @@ Proofread, clean up, and optimize the OCR output to produce a clean, complete, a
             models: {
                 'google/gemini-3-flash-preview': { maxTokens: 500000 },
                 'x-ai/grok-4.1-fast': { maxTokens: 32768 },
-                'qwen/qwen3-vl-32b-instruct': { maxTokens: 32768 },
+                'qwen/qwen3-vl-235b-a22b-instruct': { maxTokens: 130000 },
                 'openai/gpt-5-mini': { maxTokens: 65536 }
             }
         }
