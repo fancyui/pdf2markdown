@@ -3,7 +3,7 @@ const path = require('path');
 const { processOCR, postProcessDocument } = require('./ocrService');
 const logger = require('./logger');
 
-async function handlePDFUpload(filePath, customPrompt, model, provider, onProgress = null, appendContent = '') {
+async function handlePDFUpload(filePath, customPrompt, model, provider, onProgress = null, appendContent = '', outputFormat = 'markdown') {
   logger.info('Processing PDF: converting each page to image for OCR');
 
   try {
@@ -29,7 +29,7 @@ async function handlePDFUpload(filePath, customPrompt, model, provider, onProgre
       for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
         try {
           logger.debug(`Processing page ${index + 1}/${imagePaths.length} (attempt ${attempt}/${MAX_RETRIES})`);
-          const content = await processOCR(imagePaths[index], customPrompt, model, provider);
+          const content = await processOCR(imagePaths[index], customPrompt, model, provider, outputFormat);
           return { index, content, success: true };
         } catch (error) {
           lastError = error;

@@ -16,6 +16,28 @@ app.use(cors());
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
+// Simple token authentication middleware
+const ACCESS_TOKEN = process.env.ACCESS_TOKEN;
+const authMiddleware = (req, res, next) => {
+  // Skip auth if no token configured
+  if (!ACCESS_TOKEN) {
+    return next();
+  }
+
+  // Check token in query, header, or body
+  const token = req.query.token || req.headers['x-access-token'] || req.body?.token;
+
+  if (token === ACCESS_TOKEN) {
+    return next();
+  }
+
+  logger.warn(`Unauthorized access attempt from ${req.ip}`);
+  return res.status(401).json({ error: '未授权访问，请提供有效的访问令牌' });
+};
+
+// Apply auth to API routes
+app.use('/api', authMiddleware);
+
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
     const uploadDir = 'uploads';
@@ -60,7 +82,7 @@ app.post('/api/convert/pdf-stream', upload.single('file'), async (req, res) => {
     }
 
     const customPrompt = req.body.prompt || '';
-    const { model, provider, appendContent } = req.body;
+    const { model, provider, appendContent, outputFormat } = req.body;
 
     res.setHeader('Content-Type', 'application/json');
     res.setHeader('Transfer-Encoding', 'chunked');
@@ -69,7 +91,7 @@ app.post('/api/convert/pdf-stream', upload.single('file'), async (req, res) => {
       res.write(JSON.stringify(data) + '\n');
     };
 
-    const result = await handlePDFUpload(req.file.path, customPrompt, model, provider, onProgress, appendContent);
+    const result = await handlePDFUpload(req.file.path, customPrompt, model, provider, onProgress, appendContent, outputFormat);
 
     res.write(JSON.stringify({ success: true, markdown: result }) + '\n');
     res.end();

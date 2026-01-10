@@ -2,6 +2,12 @@ import axios from 'axios';
 
 const API_BASE_URL = 'http://localhost:3001/api';
 
+// Extract token from URL query parameter
+const getToken = () => {
+  const urlParams = new URLSearchParams(window.location.search);
+  return urlParams.get('token') || '';
+};
+
 export const convertFile = async (file, type, prompt = '', model = '', provider = 'novita') => {
   const formData = new FormData();
   formData.append('file', file);
@@ -10,9 +16,10 @@ export const convertFile = async (file, type, prompt = '', model = '', provider 
   formData.append('provider', provider);
 
   const endpoint = type === 'pdf' ? '/convert/pdf' : '/convert/image';
+  const token = getToken();
 
   try {
-    const response = await axios.post(`${API_BASE_URL}${endpoint}`, formData, {
+    const response = await axios.post(`${API_BASE_URL}${endpoint}${token ? `?token=${token}` : ''}`, formData, {
       headers: {
         'Content-Type': 'multipart/form-data',
       },
@@ -26,7 +33,7 @@ export const convertFile = async (file, type, prompt = '', model = '', provider 
   }
 };
 
-export const convertFileStream = async (file, type, prompt = '', model = '', provider = 'novita', onStatus, appendContent = '') => {
+export const convertFileStream = async (file, type, prompt = '', model = '', provider = 'novita', onStatus, appendContent = '', outputFormat = 'markdown') => {
   if (type !== 'pdf') {
     return convertFile(file, type, prompt, model, provider);
   }
@@ -37,9 +44,12 @@ export const convertFileStream = async (file, type, prompt = '', model = '', pro
   formData.append('model', model);
   formData.append('provider', provider);
   formData.append('appendContent', appendContent);
+  formData.append('outputFormat', outputFormat);
+
+  const token = getToken();
 
   try {
-    const response = await fetch(`${API_BASE_URL}/convert/pdf-stream`, {
+    const response = await fetch(`${API_BASE_URL}/convert/pdf-stream${token ? `?token=${token}` : ''}`, {
       method: 'POST',
       body: formData,
     });
@@ -76,8 +86,9 @@ export const convertFileStream = async (file, type, prompt = '', model = '', pro
 };
 
 export const checkHealth = async () => {
+  const token = getToken();
   try {
-    const response = await axios.get(`${API_BASE_URL}/health`);
+    const response = await axios.get(`${API_BASE_URL}/health${token ? `?token=${token}` : ''}`);
     return response.data;
   } catch (error) {
     console.error('Health check failed:', error);
