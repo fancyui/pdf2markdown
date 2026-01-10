@@ -3,7 +3,7 @@ const path = require('path');
 const { processOCR, postProcessDocument } = require('./ocrService');
 const logger = require('./logger');
 
-async function handlePDFUpload(filePath, customPrompt, model, provider, onProgress = null) {
+async function handlePDFUpload(filePath, customPrompt, model, provider, onProgress = null, appendContent = '', outputFormat = 'markdown') {
   logger.info('Processing PDF: converting each page to image for OCR');
 
   try {
@@ -14,20 +14,83 @@ async function handlePDFUpload(filePath, customPrompt, model, provider, onProgre
       onProgress({ type: 'progress', current: 0, total: imagePaths.length, status: 'splitting' });
     }
 
-    const pageContents = [];
-    for (let i = 0; i < imagePaths.length; i++) {
-      logger.debug(`Processing page ${i + 1}/${imagePaths.length}`);
+    // Parallel processing with concurrency limit and retry logic
+    const CONCURRENCY = parseInt(process.env.OCR_CONCURRENCY) || 3;
+    const MAX_RETRIES = parseInt(process.env.OCR_MAX_RETRIES) || 3;
+    const RETRY_DELAY = parseInt(process.env.OCR_RETRY_DELAY) || 2000; // ms
 
-      if (onProgress) {
-        onProgress({ type: 'progress', current: i + 1, total: imagePaths.length, status: 'ocr' });
+    const pageContents = new Array(imagePaths.length);
+    let completedCount = 0;
+
+    // Process single page with retry logic
+    const processPageWithRetry = async (index) => {
+      let lastError;
+
+      for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+        try {
+          logger.debug(`Processing page ${index + 1}/${imagePaths.length} (attempt ${attempt}/${MAX_RETRIES})`);
+          const content = await processOCR(imagePaths[index], customPrompt, model, provider, outputFormat);
+          return { index, content, success: true };
+        } catch (error) {
+          lastError = error;
+          logger.warn(`Page ${index + 1} failed (attempt ${attempt}/${MAX_RETRIES}): ${error.message}`);
+
+          if (attempt < MAX_RETRIES) {
+            // Exponential backoff: 2s, 4s, 8s...
+            const delay = RETRY_DELAY * Math.pow(2, attempt - 1);
+            logger.debug(`Retrying page ${index + 1} in ${delay}ms...`);
+            await new Promise(resolve => setTimeout(resolve, delay));
+          }
+        }
       }
 
-      const pageContent = await processOCR(imagePaths[i], customPrompt, model, provider);
-      pageContents.push(pageContent);
+      return { index, error: lastError, success: false };
+    };
 
-      if (fs.existsSync(imagePaths[i])) {
-        fs.unlinkSync(imagePaths[i]);
+    // Process in batches with concurrency limit
+    const failedPages = [];
+
+    for (let i = 0; i < imagePaths.length; i += CONCURRENCY) {
+      const batchIndices = [];
+      for (let j = i; j < Math.min(i + CONCURRENCY, imagePaths.length); j++) {
+        batchIndices.push(j);
       }
+
+      const results = await Promise.allSettled(
+        batchIndices.map(index => processPageWithRetry(index))
+      );
+
+      results.forEach((result, batchIndex) => {
+        const pageIndex = batchIndices[batchIndex];
+
+        if (result.status === 'fulfilled' && result.value.success) {
+          pageContents[pageIndex] = result.value.content;
+          completedCount++;
+
+          if (onProgress) {
+            onProgress({ type: 'progress', current: completedCount, total: imagePaths.length, status: 'ocr' });
+          }
+        } else {
+          const error = result.status === 'rejected' ? result.reason : result.value.error;
+          logger.error(`Page ${pageIndex + 1} failed after all retries:`, error?.message);
+          failedPages.push(pageIndex + 1);
+          pageContents[pageIndex] = `[Page ${pageIndex + 1} OCR failed: ${error?.message || 'Unknown error'}]`;
+          completedCount++;
+
+          if (onProgress) {
+            onProgress({ type: 'progress', current: completedCount, total: imagePaths.length, status: 'ocr' });
+          }
+        }
+
+        // Clean up image file
+        if (fs.existsSync(imagePaths[pageIndex])) {
+          fs.unlinkSync(imagePaths[pageIndex]);
+        }
+      });
+    }
+
+    if (failedPages.length > 0) {
+      logger.warn(`${failedPages.length} page(s) failed: ${failedPages.join(', ')}`);
     }
 
     if (onProgress) {
@@ -59,7 +122,13 @@ async function handlePDFUpload(filePath, customPrompt, model, provider, onProgre
       fs.unlinkSync(filePath);
     }
 
-    return finalMarkdown;
+    // Append user-specified content at the end
+    let finalResult = finalMarkdown;
+    if (appendContent && appendContent.trim()) {
+      finalResult += '\n\n' + appendContent.trim();
+    }
+
+    return finalResult;
   } catch (error) {
     logger.error('PDF processing failed:', error);
     throw new Error(`PDF处理失败: ${error.message}`);

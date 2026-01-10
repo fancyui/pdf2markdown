@@ -1,6 +1,8 @@
 const axios = require('axios');
 const {
   DEFAULT_PROMPT,
+  HTML_PROMPT,
+  TEXT_PROMPT,
   PROVIDERS,
   DEFAULT_MAX_TOKENS,
   TEMPERATURE,
@@ -64,7 +66,7 @@ async function postProcessDocument(rawMarkdown) {
   }
 }
 
-async function processOCR(imagePath, customPrompt = '', model = null, provider = 'novita') {
+async function processOCR(imagePath, customPrompt = '', model = null, provider = 'novita', outputFormat = 'markdown') {
   let API_KEY;
   let API_BASE_URL;
 
@@ -83,7 +85,7 @@ async function processOCR(imagePath, customPrompt = '', model = null, provider =
   const modelConfig = providerConfig.models[API_MODEL];
   const maxTokens = modelConfig?.maxTokens || DEFAULT_MAX_TOKENS;
 
-  logger.info(`Using model: ${API_MODEL}, maxTokens: ${maxTokens}`);
+  logger.info(`Using model: ${API_MODEL}, maxTokens: ${maxTokens}, format: ${outputFormat}`);
 
   if (!API_KEY) {
     throw new Error(`${provider.toUpperCase()}_API_KEY is not set in environment variables`);
@@ -91,7 +93,13 @@ async function processOCR(imagePath, customPrompt = '', model = null, provider =
 
   const fs = require('fs');
 
-  const prompt = customPrompt || DEFAULT_PROMPT;
+  // Select prompt based on output format
+  const FORMAT_PROMPTS = {
+    markdown: DEFAULT_PROMPT,
+    html: HTML_PROMPT,
+    text: TEXT_PROMPT
+  };
+  const prompt = customPrompt || FORMAT_PROMPTS[outputFormat] || DEFAULT_PROMPT;
 
   let imageUrl = null;
   let base64Image = null;
