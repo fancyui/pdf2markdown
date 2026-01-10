@@ -20,7 +20,7 @@ import {
 import FileUpload from './components/FileUpload';
 import MarkdownPreview from './components/MarkdownPreview';
 import { convertFile, convertFileStream } from './services/api';
-import { PROVIDER_MODELS } from './config';
+import { PROVIDER_MODELS, DEFAULT_APPEND_CONTENT } from './config';
 
 function App() {
   const [activeTab, setActiveTab] = useState('pdf');
@@ -33,6 +33,7 @@ function App() {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [progress, setProgress] = useState(null); // { current, total, status }
+  const [appendContent, setAppendContent] = useState(DEFAULT_APPEND_CONTENT.trim()); // Content to append at end of PDF
 
   const handleProviderChange = (e) => {
     const provider = e.target.value;
@@ -61,7 +62,8 @@ function App() {
         prompt,
         selectedModel,
         selectedProvider,
-        onStatus
+        onStatus,
+        appendContent
       );
 
       setMarkdown(result.markdown);
@@ -200,6 +202,18 @@ function App() {
             rows={2}
             sx={{ flexBasis: '100%' }}
           />
+          {activeTab === 'pdf' && (
+            <TextField
+              fullWidth
+              label="末尾追加内容（可选）"
+              placeholder="例如：---\n\n本文档由 AI 自动识别生成"
+              value={appendContent}
+              onChange={(e) => setAppendContent(e.target.value)}
+              multiline
+              rows={6}
+              sx={{ flexBasis: '100%' }}
+            />
+          )}
         </Box>
 
         {activeTab === 'imageUrl' ? (

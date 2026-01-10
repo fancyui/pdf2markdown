@@ -26,7 +26,7 @@ export const convertFile = async (file, type, prompt = '', model = '', provider 
   }
 };
 
-export const convertFileStream = async (file, type, prompt = '', model = '', provider = 'novita', onStatus) => {
+export const convertFileStream = async (file, type, prompt = '', model = '', provider = 'novita', onStatus, appendContent = '') => {
   if (type !== 'pdf') {
     return convertFile(file, type, prompt, model, provider);
   }
@@ -36,6 +36,7 @@ export const convertFileStream = async (file, type, prompt = '', model = '', pro
   formData.append('prompt', prompt);
   formData.append('model', model);
   formData.append('provider', provider);
+  formData.append('appendContent', appendContent);
 
   try {
     const response = await fetch(`${API_BASE_URL}/convert/pdf-stream`, {

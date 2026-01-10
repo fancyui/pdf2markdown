@@ -3,7 +3,7 @@ const path = require('path');
 const { processOCR, postProcessDocument } = require('./ocrService');
 const logger = require('./logger');
 
-async function handlePDFUpload(filePath, customPrompt, model, provider, onProgress = null) {
+async function handlePDFUpload(filePath, customPrompt, model, provider, onProgress = null, appendContent = '') {
   logger.info('Processing PDF: converting each page to image for OCR');
 
   try {
@@ -122,7 +122,13 @@ async function handlePDFUpload(filePath, customPrompt, model, provider, onProgre
       fs.unlinkSync(filePath);
     }
 
-    return finalMarkdown;
+    // Append user-specified content at the end
+    let finalResult = finalMarkdown;
+    if (appendContent && appendContent.trim()) {
+      finalResult += '\n\n' + appendContent.trim();
+    }
+
+    return finalResult;
   } catch (error) {
     logger.error('PDF processing failed:', error);
     throw new Error(`PDF处理失败: ${error.message}`);
