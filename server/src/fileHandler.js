@@ -14,34 +14,83 @@ async function handlePDFUpload(filePath, customPrompt, model, provider, onProgre
       onProgress({ type: 'progress', current: 0, total: imagePaths.length, status: 'splitting' });
     }
 
-    // Parallel processing with concurrency limit
+    // Parallel processing with concurrency limit and retry logic
     const CONCURRENCY = parseInt(process.env.OCR_CONCURRENCY) || 3;
+    const MAX_RETRIES = parseInt(process.env.OCR_MAX_RETRIES) || 3;
+    const RETRY_DELAY = parseInt(process.env.OCR_RETRY_DELAY) || 2000; // ms
+
     const pageContents = new Array(imagePaths.length);
     let completedCount = 0;
 
-    // Process pages in parallel with concurrency limit
-    const processPage = async (index) => {
-      logger.debug(`Processing page ${index + 1}/${imagePaths.length}`);
-      const content = await processOCR(imagePaths[index], customPrompt, model, provider);
-      pageContents[index] = content;
+    // Process single page with retry logic
+    const processPageWithRetry = async (index) => {
+      let lastError;
 
-      completedCount++;
-      if (onProgress) {
-        onProgress({ type: 'progress', current: completedCount, total: imagePaths.length, status: 'ocr' });
+      for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+        try {
+          logger.debug(`Processing page ${index + 1}/${imagePaths.length} (attempt ${attempt}/${MAX_RETRIES})`);
+          const content = await processOCR(imagePaths[index], customPrompt, model, provider);
+          return { index, content, success: true };
+        } catch (error) {
+          lastError = error;
+          logger.warn(`Page ${index + 1} failed (attempt ${attempt}/${MAX_RETRIES}): ${error.message}`);
+
+          if (attempt < MAX_RETRIES) {
+            // Exponential backoff: 2s, 4s, 8s...
+            const delay = RETRY_DELAY * Math.pow(2, attempt - 1);
+            logger.debug(`Retrying page ${index + 1} in ${delay}ms...`);
+            await new Promise(resolve => setTimeout(resolve, delay));
+          }
+        }
       }
 
-      if (fs.existsSync(imagePaths[index])) {
-        fs.unlinkSync(imagePaths[index]);
-      }
+      return { index, error: lastError, success: false };
     };
 
     // Process in batches with concurrency limit
+    const failedPages = [];
+
     for (let i = 0; i < imagePaths.length; i += CONCURRENCY) {
-      const batch = [];
+      const batchIndices = [];
       for (let j = i; j < Math.min(i + CONCURRENCY, imagePaths.length); j++) {
-        batch.push(processPage(j));
+        batchIndices.push(j);
       }
-      await Promise.all(batch);
+
+      const results = await Promise.allSettled(
+        batchIndices.map(index => processPageWithRetry(index))
+      );
+
+      results.forEach((result, batchIndex) => {
+        const pageIndex = batchIndices[batchIndex];
+
+        if (result.status === 'fulfilled' && result.value.success) {
+          pageContents[pageIndex] = result.value.content;
+          completedCount++;
+
+          if (onProgress) {
+            onProgress({ type: 'progress', current: completedCount, total: imagePaths.length, status: 'ocr' });
+          }
+        } else {
+          const error = result.status === 'rejected' ? result.reason : result.value.error;
+          logger.error(`Page ${pageIndex + 1} failed after all retries:`, error?.message);
+          failedPages.push(pageIndex + 1);
+          pageContents[pageIndex] = `[Page ${pageIndex + 1} OCR failed: ${error?.message || 'Unknown error'}]`;
+          completedCount++;
+
+          if (onProgress) {
+            onProgress({ type: 'progress', current: completedCount, total: imagePaths.length, status: 'ocr' });
+          }
+        }
+
+        // Clean up image file
+        if (fs.existsSync(imagePaths[pageIndex])) {
+          fs.unlinkSync(imagePaths[pageIndex]);
+        }
+      });
+    }
+
+    if (failedPages.length > 0) {
+      logger.warn(`${failedPages.length} page(s) failed: ${failedPages.join(', ')}`);
     }
 
     if (onProgress) {
