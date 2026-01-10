@@ -37,7 +37,7 @@ function App() {
   const [progress, setProgress] = useState(null); // { current, total, status }
   const [appendContent, setAppendContent] = useState(DEFAULT_APPEND_CONTENT.trim()); // Content to append at end of PDF
   const [outputFormat, setOutputFormat] = useState('markdown'); // markdown | html | text
-  const [enableAppend, setEnableAppend] = useState(true); // Enable/disable append content
+  const [enableAppend, setEnableAppend] = useState(false); // Enable/disable append content
 
   const handleProviderChange = (e) => {
     const provider = e.target.value;
