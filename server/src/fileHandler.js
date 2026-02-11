@@ -29,7 +29,10 @@ async function extractDirectory(imagePaths, directoryPages, model, provider) {
   logger.info(`Extracting directory from pages ${startPage}-${endPage} (${directoryImages.length} pages)`);
 
   // Merge directory pages into long image
-  const tempDir = path.join('uploads', 'temp_images');
+  const tempDir = path.join('uploads', 'merged_images');
+  if (!fs.existsSync(tempDir)) {
+    fs.mkdirSync(tempDir, { recursive: true });
+  }
   const longImagePath = path.join(tempDir, `directory-${Date.now()}.png`);
 
   await mergeImagesVertically(directoryImages, longImagePath);
@@ -37,10 +40,7 @@ async function extractDirectory(imagePaths, directoryPages, model, provider) {
   // OCR with directory-specific prompt
   const responseText = await processOCR(longImagePath, DIRECTORY_PROMPT, model, provider, 'text');
 
-  // Clean up long image
-  if (fs.existsSync(longImagePath)) {
-    fs.unlinkSync(longImagePath);
-  }
+  // Keep merged image for inspection (don't delete)
 
   // Parse JSON response
   let directory = '';
@@ -113,7 +113,10 @@ async function handlePDFPartsUpload(filePath, parts, directoryPages, customPromp
 
     // Process each part with retry logic
     const partResults = [];
-    const tempDir = path.join('uploads', 'temp_images');
+    const tempDir = path.join('uploads', 'merged_images');
+    if (!fs.existsSync(tempDir)) {
+      fs.mkdirSync(tempDir, { recursive: true });
+    }
 
     for (let i = 0; i < parts.length; i++) {
       const part = parts[i];
@@ -132,9 +135,10 @@ async function handlePDFPartsUpload(filePath, parts, directoryPages, customPromp
       }
 
       const partImages = imagePaths.slice(startIndex, endIndex);
+      logger.info(`Part ${i + 1}: ${partImages.length} images to merge (pages ${startPage}-${endPage})`);
 
-      // Merge part images into long image
-      const longImagePath = path.join(tempDir, `part-${i}-${Date.now()}.png`);
+      // Merge part images into long image (save to merged_images for inspection)
+      const longImagePath = path.join(tempDir, `part-${i + 1}-${title.replace(/[^a-zA-Z0-9\u4e00-\u9fa5]/g, '_')}-${Date.now()}.png`);
       await mergeImagesVertically(partImages, longImagePath);
 
       // Build context prompt with directory and heading rules
@@ -154,6 +158,16 @@ ${headingRules ? `标题层级规则:\n${headingRules}\n` : ''}${directoryText ?
         try {
           logger.debug(`OCR attempt ${attempt}/${MAX_RETRIES} for part ${i + 1}`);
           content = await processOCR(longImagePath, customPrompt, model, provider, outputFormat, contextPrompt);
+
+          // Log content length for debugging
+          logger.info(`Part ${i + 1} OCR result: ${content.length} characters`);
+
+          // Warn if content seems too short for the number of pages
+          const avgCharsPerPage = content.length / partImages.length;
+          if (avgCharsPerPage < 100 && partImages.length > 0) {
+            logger.warn(`Part ${i + 1} has very low content density: ${Math.round(avgCharsPerPage)} chars/page`);
+          }
+
           break; // Success, exit retry loop
         } catch (error) {
           lastError = error;
@@ -173,27 +187,17 @@ ${headingRules ? `标题层级规则:\n${headingRules}\n` : ''}${directoryText ?
 
       partResults.push({ content });
 
-      // Clean up long image
-      if (fs.existsSync(longImagePath)) {
-        fs.unlinkSync(longImagePath);
-      }
+      // Keep merged image for inspection (don't delete)
+      logger.info(`Merged image saved: ${longImagePath}`);
 
       if (onProgress) {
         onProgress({ type: 'progress', current: i + 1, total: parts.length, status: 'ocr' });
       }
     }
 
-    // Clean up all page images
-    for (const imagePath of imagePaths) {
-      if (fs.existsSync(imagePath)) {
-        fs.unlinkSync(imagePath);
-      }
-    }
-
-    // Clean up PDF
-    if (fs.existsSync(filePath)) {
-      fs.unlinkSync(filePath);
-    }
+    // Keep original page images and PDF for inspection (don't delete)
+    logger.info(`Original images saved in: uploads/temp_images/`);
+    logger.info(`Merged images saved in: uploads/merged_images/`);
 
     if (onProgress) {
       onProgress({ type: 'progress', current: parts.length, total: parts.length, status: 'merging' });
