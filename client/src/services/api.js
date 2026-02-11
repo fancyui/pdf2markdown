@@ -97,3 +97,67 @@ export const checkHealth = async () => {
     throw error;
   }
 };
+
+/**
+ * Convert PDF with parts mode - each part is merged into a long image for OCR
+ * @param {File} file - PDF file
+ * @param {Array} parts - [{startPage, endPage, title}]
+ * @param {Object} directoryPages - {startPage, endPage} (optional)
+ * @param {Object} options - {prompt, model, provider, outputFormat, enablePostProcess, appendContent}
+ * @param {Function} onStatus - Progress callback
+ * @returns {Promise<Object>} - {success, markdown}
+ */
+export const convertPDFParts = async (file, parts, directoryPages, options = {}, onStatus) => {
+  const formData = new FormData();
+  formData.append('file', file);
+  formData.append('parts', JSON.stringify(parts));
+
+  if (directoryPages) {
+    formData.append('directoryPages', JSON.stringify(directoryPages));
+  }
+
+  formData.append('prompt', options.prompt || '');
+  formData.append('model', options.model || '');
+  formData.append('provider', options.provider || 'novita');
+  formData.append('outputFormat', options.outputFormat || 'markdown');
+  formData.append('enablePostProcess', options.enablePostProcess || false);
+  formData.append('appendContent', options.appendContent || '');
+
+  const token = getToken();
+
+  try {
+    const response = await fetch(`${API_BASE_URL}/convert/pdf-parts${token ? `?token=${token}` : ''}`, {
+      method: 'POST',
+      body: formData,
+    });
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop();
+
+      for (const line of lines) {
+        if (line.trim()) {
+          const data = JSON.parse(line);
+          if (data.type === 'progress') {
+            onStatus(data);
+          } else if (data.success) {
+            return data;
+          } else if (data.error) {
+            throw new Error(data.error);
+          }
+        }
+      }
+    }
+  } catch (error) {
+    console.error('PDF Parts Stream Error:', error);
+    throw error;
+  }
+};

@@ -11,17 +11,21 @@ import {
   Tab,
   Tabs,
   Switch,
-  FormControlLabel
+  FormControlLabel,
+  IconButton,
+  Divider
 } from '@mui/material';
 import {
   CloudUpload as UploadIcon,
   Download as DownloadIcon,
   Description as PDFIcon,
-  Image as ImageIcon
+  Image as ImageIcon,
+  Add as AddIcon,
+  Remove as RemoveIcon
 } from '@mui/icons-material';
 import FileUpload from './components/FileUpload';
 import MarkdownPreview from './components/MarkdownPreview';
-import { convertFile, convertFileStream } from './services/api';
+import { convertFile, convertFileStream, convertPDFParts } from './services/api';
 import { PROVIDER_MODELS, DEFAULT_APPEND_CONTENT } from './config';
 
 function App() {
@@ -39,6 +43,12 @@ function App() {
   const [outputFormat, setOutputFormat] = useState('markdown'); // markdown | html | text
   const [enableAppend, setEnableAppend] = useState(false); // Enable/disable append content
   const [enablePostProcess, setEnablePostProcess] = useState(false); // Enable/disable AI post-processing
+
+  // Part mode states
+  const [enablePartMode, setEnablePartMode] = useState(false);
+  const [parts, setParts] = useState([{ startPage: 1, endPage: 1, title: 'Part 1' }]);
+  const [enableDirectory, setEnableDirectory] = useState(false);
+  const [directoryPages, setDirectoryPages] = useState({ startPage: 1, endPage: 1 });
 
   const handleProviderChange = (e) => {
     const provider = e.target.value;
@@ -61,17 +71,37 @@ function App() {
         setProgress(statusData);
       };
 
-      const result = await convertFileStream(
-        file,
-        activeTab,
-        prompt,
-        selectedModel,
-        selectedProvider,
-        onStatus,
-        enableAppend ? appendContent : '',
-        outputFormat,
-        enablePostProcess
-      );
+      let result;
+
+      // Use part mode if enabled and activeTab is pdf
+      if (activeTab === 'pdf' && enablePartMode) {
+        result = await convertPDFParts(
+          file,
+          parts,
+          enableDirectory ? directoryPages : null,
+          {
+            prompt,
+            model: selectedModel,
+            provider: selectedProvider,
+            outputFormat,
+            enablePostProcess,
+            appendContent: enableAppend ? appendContent : ''
+          },
+          onStatus
+        );
+      } else {
+        result = await convertFileStream(
+          file,
+          activeTab,
+          prompt,
+          selectedModel,
+          selectedProvider,
+          onStatus,
+          enableAppend ? appendContent : '',
+          outputFormat,
+          enablePostProcess
+        );
+      }
 
       setMarkdown(result.markdown);
       setSuccess('转换成功！');
@@ -142,6 +172,28 @@ function App() {
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
+  };
+
+  // Part management functions
+  const addPart = () => {
+    const lastPart = parts[parts.length - 1];
+    setParts([...parts, {
+      startPage: lastPart.endPage + 1,
+      endPage: lastPart.endPage + 1,
+      title: `Part ${parts.length + 1}`
+    }]);
+  };
+
+  const removePart = (index) => {
+    if (parts.length > 1) {
+      setParts(parts.filter((_, i) => i !== index));
+    }
+  };
+
+  const updatePart = (index, field, value) => {
+    const newParts = [...parts];
+    newParts[index] = { ...newParts[index], [field]: value };
+    setParts(newParts);
   };
 
   return (
@@ -265,6 +317,103 @@ function App() {
                 }
                 label="AI 后处理（去页眉页脚、合并跨页表格）"
               />
+              <Divider sx={{ my: 2 }} />
+              <FormControlLabel
+                control={
+                  <Switch
+                    checked={enablePartMode}
+                    onChange={(e) => setEnablePartMode(e.target.checked)}
+                  />
+                }
+                label="分Part模式（长图合并OCR，适合跨页内容）"
+              />
+              {enablePartMode && (
+                <Box sx={{ mt: 2, p: 2, bgcolor: 'grey.50', borderRadius: 1 }}>
+                  <Typography variant="subtitle2" gutterBottom>
+                    目录页配置（可选）
+                  </Typography>
+                  <FormControlLabel
+                    control={
+                      <Switch
+                        checked={enableDirectory}
+                        onChange={(e) => setEnableDirectory(e.target.checked)}
+                      />
+                    }
+                    label="指定目录页范围"
+                  />
+                  {enableDirectory && (
+                    <Box sx={{ display: 'flex', gap: 2, mt: 1, mb: 2 }}>
+                      <TextField
+                        type="number"
+                        label="目录起始页"
+                        value={directoryPages.startPage}
+                        onChange={(e) => setDirectoryPages({ ...directoryPages, startPage: parseInt(e.target.value) || 1 })}
+                        size="small"
+                        inputProps={{ min: 1 }}
+                        sx={{ width: 120 }}
+                      />
+                      <TextField
+                        type="number"
+                        label="目录结束页"
+                        value={directoryPages.endPage}
+                        onChange={(e) => setDirectoryPages({ ...directoryPages, endPage: parseInt(e.target.value) || 1 })}
+                        size="small"
+                        inputProps={{ min: 1 }}
+                        sx={{ width: 120 }}
+                      />
+                    </Box>
+                  )}
+
+                  <Typography variant="subtitle2" sx={{ mt: 2 }} gutterBottom>
+                    Part 配置
+                  </Typography>
+                  {parts.map((part, index) => (
+                    <Box key={index} sx={{ display: 'flex', gap: 2, alignItems: 'center', mb: 1 }}>
+                      <TextField
+                        type="number"
+                        label="起始页"
+                        value={part.startPage}
+                        onChange={(e) => updatePart(index, 'startPage', parseInt(e.target.value) || 1)}
+                        size="small"
+                        inputProps={{ min: 1 }}
+                        sx={{ width: 100 }}
+                      />
+                      <TextField
+                        type="number"
+                        label="结束页"
+                        value={part.endPage}
+                        onChange={(e) => updatePart(index, 'endPage', parseInt(e.target.value) || 1)}
+                        size="small"
+                        inputProps={{ min: 1 }}
+                        sx={{ width: 100 }}
+                      />
+                      <TextField
+                        label="标题"
+                        value={part.title}
+                        onChange={(e) => updatePart(index, 'title', e.target.value)}
+                        size="small"
+                        sx={{ flex: 1 }}
+                      />
+                      <IconButton
+                        onClick={() => removePart(index)}
+                        disabled={parts.length === 1}
+                        color="error"
+                      >
+                        <RemoveIcon />
+                      </IconButton>
+                    </Box>
+                  ))}
+                  <Button
+                    startIcon={<AddIcon />}
+                    onClick={addPart}
+                    variant="outlined"
+                    size="small"
+                    sx={{ mt: 1 }}
+                  >
+                    添加 Part
+                  </Button>
+                </Box>
+              )}
             </Box>
           )}
         </Box>
