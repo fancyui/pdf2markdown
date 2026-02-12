@@ -102,7 +102,13 @@ async function processOCR(imagePath, customPrompt = '', model = null, provider =
     text: TEXT_PROMPT
   };
 
-  let prompt = customPrompt || FORMAT_PROMPTS[outputFormat] || DEFAULT_PROMPT;
+  const defaultPrompt = FORMAT_PROMPTS[outputFormat] || DEFAULT_PROMPT;
+  let prompt = defaultPrompt;
+
+  // Append custom prompt if provided instead of replacing
+  if (customPrompt && customPrompt.trim()) {
+    prompt += `\n\n[Additional Instructions]:\n${customPrompt}`;
+  }
 
   // Add context if provided
   if (context) {

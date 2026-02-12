@@ -295,8 +295,8 @@ function App() {
           </TextField>
           <TextField
             fullWidth
-            label="自定义提示词（可选）"
-            placeholder="例如：请识别图片中的文字内容，并以Markdown格式输出..."
+            label="附加提示词（可选）"
+            placeholder="在此添加额外指令，将附加在默认处理规则之后。例如：'请重点识别表格数据'..."
             value={prompt}
             onChange={(e) => setPrompt(e.target.value)}
             multiline
