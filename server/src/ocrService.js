@@ -67,7 +67,7 @@ async function postProcessDocument(rawMarkdown) {
   }
 }
 
-async function processOCR(imagePath, customPrompt = '', model = null, provider = 'novita', outputFormat = 'markdown', context = null) {
+async function processOCR(imagePath, customPrompt = '', model = null, provider = 'novita', outputFormat = 'markdown', context = null, pageImages = []) {
   let API_KEY;
   let API_BASE_URL;
 
@@ -106,6 +106,15 @@ async function processOCR(imagePath, customPrompt = '', model = null, provider =
   // Add context if provided
   if (context) {
     prompt = context + '\n\n' + prompt;
+  }
+
+  // Add image references if provided (for embedding extracted images in markdown)
+  if (pageImages && pageImages.length > 0 && outputFormat === 'markdown') {
+    const imageHint = `\n\n[本页包含以下嵌入图片，请在识别到图片区域时使用对应的markdown图片语法引用]\n${
+      pageImages.map(img => `- ![](${img})`).join('\n')
+    }`;
+    prompt = prompt + imageHint;
+    logger.debug(`Added ${pageImages.length} image references to prompt`);
   }
 
   const promptSource = customPrompt ? 'custom' : `prompts/${outputFormat}.md`;

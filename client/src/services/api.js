@@ -73,9 +73,9 @@ export const convertFileStream = async (file, type, prompt = '', model = '', pro
           const data = JSON.parse(line);
           if (data.type === 'progress') {
             onStatus(data);
-          } else if (data.success) {
+          } else if (data.type === 'complete') {
             return data;
-          } else if (data.error) {
+          } else if (data.type === 'error' || data.error) {
             throw new Error(data.error);
           }
         }
@@ -148,9 +148,9 @@ export const convertPDFParts = async (file, parts, directoryPages, options = {},
           const data = JSON.parse(line);
           if (data.type === 'progress') {
             onStatus(data);
-          } else if (data.success) {
+          } else if (data.type === 'complete') {
             return data;
-          } else if (data.error) {
+          } else if (data.type === 'error' || data.error) {
             throw new Error(data.error);
           }
         }

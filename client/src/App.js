@@ -44,6 +44,10 @@ function App() {
   const [enableAppend, setEnableAppend] = useState(false); // Enable/disable append content
   const [enablePostProcess, setEnablePostProcess] = useState(false); // Enable/disable AI post-processing
 
+  // Task and image states
+  const [taskId, setTaskId] = useState(null);
+  const [images, setImages] = useState([]);
+
   // Part mode states
   const [enablePartMode, setEnablePartMode] = useState(false);
   const [parts, setParts] = useState([{ startPage: 1, endPage: 1, title: 'Part 1' }]);
@@ -65,6 +69,8 @@ function App() {
     setError('');
     setSuccess('');
     setProgress(null);
+    setTaskId(null);
+    setImages([]);
 
     try {
       const onStatus = (statusData) => {
@@ -104,6 +110,10 @@ function App() {
       }
 
       setMarkdown(result.markdown);
+      if (result.taskId) {
+        setTaskId(result.taskId);
+        setImages(result.images || []);
+      }
       setSuccess('转换成功！');
     } catch (err) {
       setError(err.message || '转换失败，请重试');
@@ -172,6 +182,13 @@ function App() {
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
+  };
+
+  const handleDownloadImages = () => {
+    if (!taskId) return;
+    const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:3001/api';
+    const token = new URLSearchParams(window.location.search).get('token') || '';
+    window.open(`${API_BASE_URL}/download/images/${taskId}${token ? `?token=${token}` : ''}`);
   };
 
   // Part management functions
@@ -480,15 +497,26 @@ function App() {
                 {outputFormat === 'html' && 'HTML 预览'}
                 {outputFormat === 'text' && '纯文本预览'}
               </Typography>
-              <Button
-                variant="contained"
-                startIcon={<DownloadIcon />}
-                onClick={handleDownload}
-              >
-                {outputFormat === 'markdown' && '下载 Markdown'}
-                {outputFormat === 'html' && '下载 HTML'}
-                {outputFormat === 'text' && '下载纯文本'}
-              </Button>
+              <Box sx={{ display: 'flex', gap: 1 }}>
+                {images && images.length > 0 && (
+                  <Button
+                    variant="outlined"
+                    startIcon={<ImageIcon />}
+                    onClick={handleDownloadImages}
+                  >
+                    下载图片 ({images.length})
+                  </Button>
+                )}
+                <Button
+                  variant="contained"
+                  startIcon={<DownloadIcon />}
+                  onClick={handleDownload}
+                >
+                  {outputFormat === 'markdown' && '下载 Markdown'}
+                  {outputFormat === 'html' && '下载 HTML'}
+                  {outputFormat === 'text' && '下载纯文本'}
+                </Button>
+              </Box>
             </Box>
             <MarkdownPreview content={markdown} />
           </Box>

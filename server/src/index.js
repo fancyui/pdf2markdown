@@ -4,6 +4,7 @@ const express = require('express');
 const cors = require('cors');
 const multer = require('multer');
 const fs = require('fs');
+const archiver = require('archiver');
 const { processOCR } = require('./ocrService');
 const { handlePDFUpload, handleImageUpload, handlePDFPartsUpload } = require('./fileHandler');
 const { DEFAULT_PROMPT } = require('./config');
@@ -95,11 +96,17 @@ app.post('/api/convert/pdf-stream', upload.single('file'), async (req, res) => {
 
     const result = await handlePDFUpload(req.file.path, customPrompt, model, provider, onProgress, appendContent, outputFormat, enablePostProcess === 'true');
 
-    res.write(JSON.stringify({ success: true, markdown: result }) + '\n');
+    res.write(JSON.stringify({
+      type: 'complete',
+      success: true,
+      markdown: result.markdown,
+      taskId: result.taskId,
+      images: result.images
+    }) + '\n');
     res.end();
   } catch (error) {
     logger.error('Error processing PDF stream:', error);
-    res.write(JSON.stringify({ error: error.message }) + '\n');
+    res.write(JSON.stringify({ type: 'error', error: error.message }) + '\n');
     res.end();
   }
 });
@@ -153,11 +160,17 @@ app.post('/api/convert/pdf-parts', upload.single('file'), async (req, res) => {
       enablePostProcess === 'true'
     );
 
-    res.write(JSON.stringify({ success: true, markdown: result }) + '\n');
+    res.write(JSON.stringify({
+      type: 'complete',
+      success: true,
+      markdown: result.markdown,
+      taskId: result.taskId,
+      images: result.images
+    }) + '\n');
     res.end();
   } catch (error) {
     logger.error('Error processing PDF parts:', error);
-    res.write(JSON.stringify({ error: error.message }) + '\n');
+    res.write(JSON.stringify({ type: 'error', error: error.message }) + '\n');
     res.end();
   }
 });
@@ -199,6 +212,46 @@ app.post('/api/convert/image-url', async (req, res) => {
 
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', message: 'Server is running' });
+});
+
+// Serve extracted images
+app.get('/api/images/:taskId/:imageName', (req, res) => {
+  const { taskId, imageName } = req.params;
+  const imagePath = path.join(__dirname, '../../uploads', taskId, 'images', imageName);
+
+  if (!fs.existsSync(imagePath)) {
+    return res.status(404).json({ error: 'Image not found' });
+  }
+
+  res.sendFile(imagePath);
+});
+
+// Download all images as ZIP
+app.get('/api/download/images/:taskId', async (req, res) => {
+  const { taskId } = req.params;
+  const imageDir = path.join(__dirname, '../../uploads', taskId, 'images');
+
+  if (!fs.existsSync(imageDir)) {
+    return res.status(404).json({ error: 'No images found for this task' });
+  }
+
+  const images = fs.readdirSync(imageDir);
+  if (images.length === 0) {
+    return res.status(404).json({ error: 'No images found for this task' });
+  }
+
+  res.setHeader('Content-Type', 'application/zip');
+  res.setHeader('Content-Disposition', `attachment; filename=images-${taskId}.zip`);
+
+  const archive = archiver('zip', { zlib: { level: 9 } });
+  archive.pipe(res);
+
+  for (const imageName of images) {
+    const imagePath = path.join(imageDir, imageName);
+    archive.file(imagePath, { name: imageName });
+  }
+
+  archive.finalize();
 });
 
 const server = app.listen(PORT, () => {
