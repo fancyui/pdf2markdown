@@ -1,11 +1,15 @@
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
-const { PDFDocument, PDFName } = require('pdf-lib');
+const { execSync } = require('child_process');
+const sharp = require('sharp');
 const logger = require('./logger');
 
+// Configuration for pdfimages binary
+const PDFIMAGES_BIN = '/Volumes/macu/programs/xpdf-tools-mac-4.06/bin64/pdfimages';
+
 /**
- * Extract embedded images from a PDF file
+ * Extract embedded images from a PDF file using pdfimages CLI
  * @param {string} pdfPath - Path to the PDF file
  * @param {string} outputDir - Directory to save extracted images
  * @param {object|null} pageRange - Optional page range {start, end} (1-indexed)
@@ -20,299 +24,255 @@ async function extractImagesFromPDF(pdfPath, outputDir, pageRange = null) {
     fs.mkdirSync(outputDir, { recursive: true });
   }
 
+  const tempPrefix = path.join(outputDir, 'raw');
+
   try {
-    const dataBuffer = fs.readFileSync(pdfPath);
-    const pdfDoc = await PDFDocument.load(dataBuffer);
-    const pages = pdfDoc.getPages();
+    // 1. Get image list with page numbers
+    let listOptions = '-listonly';
+    if (pageRange) {
+      if (pageRange.start) listOptions += ` -f ${pageRange.start}`;
+      if (pageRange.end) listOptions += ` -l ${pageRange.end}`;
+    }
+    const listCmd = `"${PDFIMAGES_BIN}" ${listOptions} "${pdfPath}"`;
 
-    logger.debug(`PDF has ${pages.length} pages`);
+    logger.debug(`Running pdfimages list: ${listCmd}`);
+    const listOutput = execSync(listCmd, { encoding: 'utf8' });
+    const listLines = listOutput.split('\n').filter(line => line.trim().startsWith('page='));
 
-    // Determine page range to process
-    const startPage = pageRange ? Math.max(0, pageRange.start - 1) : 0;
-    const endPage = pageRange ? Math.min(pages.length, pageRange.end) : pages.length;
+    if (listLines.length === 0) {
+      logger.info('No images found in PDF using pdfimages -listonly');
+      return images;
+    }
 
-    for (let pageIndex = startPage; pageIndex < endPage; pageIndex++) {
-      const page = pages[pageIndex];
-      const pageNum = pageIndex + 1; // 1-indexed for output
+    // 2. Extract images
+    // -j: write JPEG images as JPEG, -J: write JPEG 2000 images as JP2
+    let extractOptions = '-j -J';
+    if (pageRange) {
+      if (pageRange.start) extractOptions += ` -f ${pageRange.start}`;
+      if (pageRange.end) extractOptions += ` -l ${pageRange.end}`;
+    }
+    const extractCmd = `"${PDFIMAGES_BIN}" ${extractOptions} "${pdfPath}" "${tempPrefix}"`;
 
-      // Get page resources
-      const resources = page.node.Resources();
-      if (!resources) {
-        continue;
-      }
+    logger.debug(`Running pdfimages extract: ${extractCmd}`);
+    execSync(extractCmd);
 
-      // Get XObjects dictionary
-      const xObjects = resources.get(PDFName.of('XObject'));
-      if (!xObjects) {
-        continue;
-      }
+    // 3. Parse metadata for each image
+    const imageMetadata = listLines.map(line => {
+      const page = parseInt(line.match(/page=(\d+)/)?.[1] || '0');
+      const width = parseInt(line.match(/width=(\d+)/)?.[1] || '0');
+      const height = parseInt(line.match(/height=(\d+)/)?.[1] || '0');
+      const colorspace = line.match(/colorspace=([^\s]+)/)?.[1] || '';
+      return { page, width, height, colorspace };
+    });
 
-      let imgIndex = 0;
-      for (const key of xObjects.keys()) {
+    // 4. Process extracted files
+    // pdfimages names files as <prefix>-000.<ext>, <prefix>-001.<ext>, etc.
+    const extractedFiles = fs.readdirSync(outputDir)
+      .filter(f => f.startsWith('raw-'))
+      .sort();
+
+    for (let i = 0; i < imageMetadata.length; i++) {
+      const meta = imageMetadata[i];
+      const tempFile = extractedFiles[i];
+      if (!tempFile) continue;
+
+      const tempFilePath = path.join(outputDir, tempFile);
+      const ext = path.extname(tempFile).toLowerCase();
+
+      // CHECK FOR MASK: 
+      // If this image is on the same page and same size as the previous one, 
+      // and this one is grayscale while previous was color, it's likely a mask.
+      const prevImage = images[images.length - 1];
+      const isMask = prevImage &&
+        prevImage.pageIndex === meta.page &&
+        prevImage.width === meta.width &&
+        prevImage.height === meta.height &&
+        (meta.colorspace === 'DeviceGray' || meta.colorspace === 'indexed');
+
+      if (isMask) {
         try {
-          const xObjectRef = xObjects.get(key);
+          logger.debug(`Detected mask for page ${meta.page} (${tempFile}). Merging...`);
+          const colorPath = prevImage.imagePath;
+          const maskPath = tempFilePath;
+          const mergedPath = path.join(outputDir, `merged_${path.basename(colorPath)}`);
 
-          // Resolve reference if needed
-          let xObject = xObjectRef;
-          if (xObjectRef.constructor.name === 'PDFRef') {
-            xObject = pdfDoc.context.lookup(xObjectRef);
+          // Apply mask as alpha channel
+          // Note: Sharp needs to handle the input formats (PPM/PGM might need manual parse)
+          let colorInput, maskInput;
+
+          if (path.extname(colorPath) === '.ppm' || path.extname(colorPath) === '.pgm') {
+            // This is tricky because prevImage.imagePath is already the converted PNG
+            // but we might want the original raw data for better quality?
+            // Actually, the previous image was already saved as PNG in the previous iteration.
+            // We can just use that PNG.
+            colorInput = prevImage.imagePath;
+          } else {
+            colorInput = prevImage.imagePath;
           }
 
-          if (!xObject || xObject.constructor.name !== 'PDFRawStream') {
-            continue;
+          // For the current mask file (tempFilePath), it might be PGM
+          if (ext === '.pgm' || ext === '.ppm') {
+            const maskRaw = fs.readFileSync(tempFilePath);
+            const maskInfo = parseNetpbm(maskRaw);
+            maskInput = {
+              create: {
+                width: maskInfo.width,
+                height: maskInfo.height,
+                channels: maskInfo.channels,
+                background: { r: 0, g: 0, b: 0, alpha: 1 }
+              }
+            };
+            // Simpler way: convert mask to temporary PNG first or use buffer
+            maskInput = await sharp(maskInfo.data, {
+              raw: { width: maskInfo.width, height: maskInfo.height, channels: maskInfo.channels }
+            }).png().toBuffer();
+          } else {
+            maskInput = tempFilePath;
           }
 
-          // Check if it's an image
-          const dict = xObject.dict;
-          const subtype = dict.get(PDFName.of('Subtype'));
-          if (!subtype || subtype.encodedName !== '/Image') {
-            continue;
-          }
+          await sharp(colorInput)
+            .joinChannel(maskInput)
+            .png()
+            .toFile(mergedPath);
 
-          // Get image properties
-          const widthObj = dict.get(PDFName.of('Width'));
-          const heightObj = dict.get(PDFName.of('Height'));
-          const filterObj = dict.get(PDFName.of('Filter'));
-          const colorSpaceObj = dict.get(PDFName.of('ColorSpace'));
-          const bpcObj = dict.get(PDFName.of('BitsPerComponent'));
+          // Replace original with merged
+          fs.unlinkSync(colorPath);
+          fs.renameSync(mergedPath, colorPath);
 
-          const width = widthObj ? widthObj.asNumber() : 0;
-          const height = heightObj ? heightObj.asNumber() : 0;
-          const filter = filterObj ? filterObj.encodedName : '';
-          const colorSpace = colorSpaceObj ? colorSpaceObj.encodedName : '';
-          const bpc = bpcObj ? bpcObj.asNumber() : 8;
+          logger.debug(`Successfully merged mask into ${prevImage.imageName}`);
 
-          // Get the raw image data
-          const rawData = Buffer.from(xObject.contents);
-          if (!rawData || rawData.length === 0) {
-            continue;
-          }
+          // Clean up mask temp file
+          fs.unlinkSync(tempFilePath);
+          continue; // Skip adding this mask as a separate image
+        } catch (maskError) {
+          logger.warn(`Failed to merge mask: ${maskError.message}`);
+          // Fallback: process mask as a separate image (or just let it die)
+        }
+      }
 
-          // Try to extract usable image data
-          const imageData = extractImageData(rawData, filter, width, height, colorSpace, bpc);
-          if (!imageData || !imageData.data || imageData.data.length === 0) {
-            continue;
-          }
+      try {
+        // Read raw data for hashing/deduplication
+        const rawData = fs.readFileSync(tempFilePath);
+        const hash = crypto.createHash('md5').update(rawData).digest('hex');
 
-          // Generate hash for deduplication
-          const hash = crypto.createHash('md5').update(imageData.data).digest('hex');
+        if (extractedHashes.has(hash)) {
+          logger.debug(`Skipping duplicate image on page ${meta.page} (${tempFile})`);
+          fs.unlinkSync(tempFilePath);
+          continue;
+        }
+        extractedHashes.add(hash);
 
-          if (extractedHashes.has(hash)) {
-            logger.debug(`Skipping duplicate image on page ${pageNum}`);
-            continue;
-          }
-          extractedHashes.add(hash);
+        // Determine final filename
+        const imgIndex = images.filter(img => img.pageIndex === meta.page).length + 1;
+        const finalImageName = `page${meta.page}_img${imgIndex}.png`;
+        const finalImagePath = path.join(outputDir, finalImageName);
 
-          // Generate filename
-          imgIndex++;
-          const imageName = `page${pageNum}_img${imgIndex}.${imageData.extension}`;
-          const imagePath = path.join(outputDir, imageName);
+        // Convert to PNG using sharp
+        if (ext === '.ppm' || ext === '.pgm') {
+          const pbmInfo = parseNetpbm(rawData);
+          await sharp(pbmInfo.data, {
+            raw: { width: pbmInfo.width, height: pbmInfo.height, channels: pbmInfo.channels }
+          }).png().toFile(finalImagePath);
+        } else {
+          await sharp(tempFilePath).png().toFile(finalImagePath);
+        }
 
-          // Save image
-          fs.writeFileSync(imagePath, imageData.data);
+        images.push({
+          pageIndex: meta.page,
+          imageName: finalImageName,
+          imagePath: finalImagePath,
+          width: meta.width,
+          height: meta.height
+        });
 
-          images.push({
-            pageIndex: pageNum, // 1-indexed
-            imageName,
-            imagePath
-          });
-
-          logger.debug(`Extracted image: ${imageName} (${width}x${height}, filter: ${filter})`);
-        } catch (imgError) {
-          logger.warn(`Failed to extract image from page ${pageNum}: ${imgError.message}`);
+        if (fs.existsSync(tempFilePath)) {
+          fs.unlinkSync(tempFilePath);
+        }
+        logger.debug(`Extracted and converted: ${finalImageName} from ${tempFile}`);
+      } catch (procError) {
+        logger.warn(`Failed to process extracted image ${tempFile}: ${procError.message}`);
+        if (fs.existsSync(tempFilePath)) {
+          fs.unlinkSync(tempFilePath);
         }
       }
     }
 
-    logger.info(`Extracted ${images.length} images from PDF`);
+    // Clean up any stray raw files
+    const remainingRaw = fs.readdirSync(outputDir).filter(f => f.startsWith('raw-'));
+    for (const f of remainingRaw) {
+      fs.unlinkSync(path.join(outputDir, f));
+    }
+
+    logger.info(`Extracted ${images.length} images from PDF using pdfimages`);
     return images;
 
   } catch (error) {
-    logger.error('Error extracting images from PDF:', error);
-    // Don't throw - image extraction failure shouldn't break the main flow
+    logger.error('Error extracting images using pdfimages:', error);
     return images;
   }
 }
 
 /**
- * Extract usable image data from raw PDF stream data
+ * Simple parser for PPM/PGM binary formats (P6/P5)
+ * Returns {width, height, channels, data}
  */
-function extractImageData(rawData, filter, width, height, colorSpace, bpc) {
-  const zlib = require('zlib');
+function parseNetpbm(buffer) {
+  let pos = 0;
 
-  // DCTDecode = JPEG (already compressed as JPEG, ready to use)
-  if (filter === '/DCTDecode') {
-    return { data: rawData, extension: 'jpg' };
-  }
-
-  // JPXDecode = JPEG2000
-  if (filter === '/JPXDecode') {
-    return { data: rawData, extension: 'jp2' };
-  }
-
-  // Check magic bytes to detect format (some PDFs store JPEG without DCTDecode filter)
-  if (rawData.length >= 4) {
-    // JPEG magic bytes
-    if (rawData[0] === 0xFF && rawData[1] === 0xD8) {
-      return { data: rawData, extension: 'jpg' };
-    }
-    // PNG magic bytes
-    if (rawData[0] === 0x89 && rawData[1] === 0x50 && rawData[2] === 0x4E && rawData[3] === 0x47) {
-      return { data: rawData, extension: 'png' };
-    }
-  }
-
-  // FlateDecode = zlib compressed raw pixel data
-  if (filter === '/FlateDecode') {
-    try {
-      // First decompress the zlib data
-      const decompressed = zlib.inflateSync(rawData);
-
-      // Try to create PNG from decompressed raw pixels
-      const pngData = createPngFromRawPixels(decompressed, width, height, colorSpace, bpc);
-      if (pngData) {
-        return { data: pngData, extension: 'png' };
+  function nextToken() {
+    // Skip comments and whitespace
+    while (pos < buffer.length) {
+      const char = String.fromCharCode(buffer[pos]);
+      if (/\s/.test(char)) {
+        pos++;
+        continue;
       }
-    } catch (decompressError) {
-      logger.debug(`Failed to decompress FlateDecode data: ${decompressError.message}`);
+      if (char === '#') {
+        // Skip comment line
+        while (pos < buffer.length && buffer[pos] !== 10 && buffer[pos] !== 13) {
+          pos++;
+        }
+        continue;
+      }
+      break;
     }
-    // Fallback: save as raw zlib data
-    logger.debug(`Could not create PNG for FlateDecode image, saving as raw`);
-    return { data: rawData, extension: 'raw' };
+
+    let start = pos;
+    while (pos < buffer.length && !/\s/.test(String.fromCharCode(buffer[pos]))) {
+      pos++;
+    }
+    return buffer.slice(start, pos).toString();
   }
 
-  // Unknown filter - try to save as-is
-  logger.debug(`Unknown filter: ${filter}, saving as raw`);
-  return { data: rawData, extension: 'raw' };
-}
-
-/**
- * Create a PNG buffer from raw pixel data (already decompressed from FlateDecode)
- */
-function createPngFromRawPixels(rawData, width, height, colorSpace, bitsPerComponent) {
-  try {
-    if (width <= 0 || height <= 0 || rawData.length === 0) {
-      return null;
-    }
-
-    // Determine color type based on color space
-    let colorType = 2; // RGB by default
-    let channels = 3;
-
-    if (colorSpace === '/DeviceGray' || colorSpace === '/G') {
-      colorType = 0; // Grayscale
-      channels = 1;
-    } else if (colorSpace === '/DeviceCMYK') {
-      // CMYK needs conversion to RGB - skip for now
-      logger.debug('CMYK colorspace not supported for PNG conversion');
-      return null;
-    } else if (colorSpace === '/DeviceRGB' || colorSpace === '/RGB') {
-      colorType = 2; // RGB
-      channels = 3;
-    } else if (colorSpace === '/DeviceGray' || colorSpace === '/G') {
-      colorType = 0;
-      channels = 1;
-    }
-
-    const bitDepth = bitsPerComponent || 8;
-
-    // Calculate expected size
-    const expectedSize = width * height * channels * (bitDepth / 8);
-    if (rawData.length < expectedSize) {
-      logger.debug(`Raw data too small: ${rawData.length} < ${expectedSize}`);
-      return null;
-    }
-
-    // Add filter byte (0 = None) for each row
-    const rowSize = width * channels;
-    const filteredData = Buffer.alloc(height * (rowSize + 1));
-    let destIdx = 0;
-    let srcIdx = 0;
-
-    for (let y = 0; y < height; y++) {
-      filteredData[destIdx++] = 0; // Filter type: None
-      rawData.copy(filteredData, destIdx, srcIdx, srcIdx + rowSize);
-      destIdx += rowSize;
-      srcIdx += rowSize;
-    }
-
-    // Build PNG chunks
-    const zlib = require('zlib');
-    const compressed = zlib.deflateSync(filteredData);
-
-    // PNG signature
-    const signature = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
-
-    // IHDR chunk
-    const ihdrData = Buffer.alloc(13);
-    ihdrData.writeUInt32BE(width, 0);
-    ihdrData.writeUInt32BE(height, 4);
-    ihdrData.writeUInt8(bitDepth, 8); // bit depth
-    ihdrData.writeUInt8(colorType, 9); // color type
-    ihdrData.writeUInt8(0, 10); // compression
-    ihdrData.writeUInt8(0, 11); // filter
-    ihdrData.writeUInt8(0, 12); // interlace
-    const ihdr = createPngChunk('IHDR', ihdrData);
-
-    // IDAT chunk
-    const idat = createPngChunk('IDAT', compressed);
-
-    // IEND chunk
-    const iend = createPngChunk('IEND', Buffer.alloc(0));
-
-    return Buffer.concat([signature, ihdr, idat, iend]);
-
-  } catch (error) {
-    logger.debug(`Failed to create PNG: ${error.message}`);
-    return null;
-  }
-}
-
-/**
- * Create a PNG chunk
- */
-function createPngChunk(type, data) {
-  const length = Buffer.alloc(4);
-  length.writeUInt32BE(data.length, 0);
-
-  const typeBuffer = Buffer.from(type, 'ascii');
-
-  // Calculate CRC32 of type + data
-  const crcData = Buffer.concat([typeBuffer, data]);
-  const crc = crc32(crcData);
-  const crcBuffer = Buffer.alloc(4);
-  crcBuffer.writeUInt32BE(crc >>> 0, 0);
-
-  return Buffer.concat([length, typeBuffer, data, crcBuffer]);
-}
-
-/**
- * Calculate CRC32
- */
-function crc32(data) {
-  const table = getCrc32Table();
-  let crc = 0xFFFFFFFF;
-
-  for (let i = 0; i < data.length; i++) {
-    crc = (crc >>> 8) ^ table[(crc ^ data[i]) & 0xFF];
+  const magic = nextToken();
+  if (magic !== 'P6' && magic !== 'P5') {
+    throw new Error(`Unsupported Netpbm format: ${magic}`);
   }
 
-  return crc ^ 0xFFFFFFFF;
-}
+  const width = parseInt(nextToken());
+  const height = parseInt(nextToken());
+  const maxVal = parseInt(nextToken());
 
-let crc32Table = null;
-function getCrc32Table() {
-  if (crc32Table) return crc32Table;
-
-  crc32Table = new Uint32Array(256);
-  for (let i = 0; i < 256; i++) {
-    let c = i;
-    for (let j = 0; j < 8; j++) {
-      c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1);
-    }
-    crc32Table[i] = c;
+  if (isNaN(width) || isNaN(height) || isNaN(maxVal)) {
+    throw new Error('Invalid PPM header');
   }
-  return crc32Table;
+
+  if (maxVal !== 255) {
+    throw new Error(`Unsupported maxVal: ${maxVal} (only 255 supported)`);
+  }
+
+  // Header ends with a single whitespace character (usually newline)
+  pos++;
+  const data = buffer.slice(pos);
+  const channels = (magic === 'P6' ? 3 : 1);
+
+  // Validate data size
+  const expectedSize = width * height * channels;
+  if (data.length < expectedSize) {
+    throw new Error(`PPM data truncated: expected ${expectedSize}, got ${data.length}`);
+  }
+
+  return { width, height, channels, data: data.slice(0, expectedSize) };
 }
 
 /**

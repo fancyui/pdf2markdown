@@ -182,10 +182,20 @@ ${headingRules ? `标题层级规则:\n${headingRules}\n` : ''}${directoryText ?
       let content = '';
       let lastError = null;
 
+      // Get images for the page range of this part
+      const partExtractedImages = [];
+      for (let p = startPage; p <= endPage; p++) {
+        if (imageMap[p]) {
+          // Resolve to absolute paths for ocrService to read
+          const absPaths = imageMap[p].map(imgRel => path.join(process.cwd(), taskDir, imgRel.replace('./', '')));
+          partExtractedImages.push(...absPaths);
+        }
+      }
+
       for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
         try {
           logger.debug(`OCR attempt ${attempt}/${MAX_RETRIES} for part ${i + 1}`);
-          content = await processOCR(longImagePath, customPrompt, model, provider, outputFormat, contextPrompt);
+          content = await processOCR(longImagePath, customPrompt, model, provider, outputFormat, contextPrompt, partExtractedImages);
 
           // Log content length for debugging
           logger.info(`Part ${i + 1} OCR result: ${content.length} characters`);
@@ -317,7 +327,9 @@ async function handlePDFUpload(filePath, customPrompt, model, provider, onProgre
     const processPageWithRetry = async (index) => {
       let lastError;
       const pageNum = index + 1; // 1-indexed page number
-      const pageImages = imageMap[pageNum] || []; // Get images for this page
+      const pageRelImages = imageMap[pageNum] || [];
+      // Resolve to absolute paths for ocrService to read
+      const pageImages = pageRelImages.map(imgRel => path.join(process.cwd(), taskDir, imgRel.replace('./', '')));
 
       for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
         try {

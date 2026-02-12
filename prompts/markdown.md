@@ -95,7 +95,9 @@ You are a professional OCR recognition and document formatting assistant. Please
 
 ### 11. Charts and Graphics
 
-- **Embedded images from PDF**: When you see an image in the page that corresponds to an extracted image reference provided in the prompt, use the exact markdown image syntax given: `![description](./images/pageX_imgY.ext)`
+- **Embedded images from PDF**: 
+    - In standard text flow: Use exact markdown image syntax with the corresponding filename: `![图片](./images/filename.png)`.
+    - **Inside HTML `<table>` cells**: You MUST use the HTML `<img>` tag because Markdown syntax is not parsed inside HTML: `<img src="./images/filename.png" width="200" />`.
 - Regular images: Use [image: description] as plain text placeholder
 - Flowcharts/diagrams: Use [flowchart: description] as plain text
 - Charts/data visualization: Use [chart: description] as plain text

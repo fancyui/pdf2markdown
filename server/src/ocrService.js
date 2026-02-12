@@ -1,4 +1,5 @@
 const axios = require('axios');
+const path = require('path');
 const {
   DEFAULT_PROMPT,
   HTML_PROMPT,
@@ -110,9 +111,8 @@ async function processOCR(imagePath, customPrompt = '', model = null, provider =
 
   // Add image references if provided (for embedding extracted images in markdown)
   if (pageImages && pageImages.length > 0 && outputFormat === 'markdown') {
-    const imageHint = `\n\n[本页包含以下嵌入图片，请在识别到图片区域时使用对应的markdown图片语法引用]\n${
-      pageImages.map(img => `- ![](${img})`).join('\n')
-    }`;
+    const imageHint = `\n\n[本页包含以下嵌入图片，请在识别到图片区域时引用。如果在 HTML 表格内部，必须使用 <img src="./images/文件名.png" width="200" /> 格式以确保显示]\n${pageImages.map(img => `![图片](${img})`).join('\n')
+      }`;
     prompt = prompt + imageHint;
     logger.debug(`Added ${pageImages.length} image references to prompt`);
   }
@@ -156,6 +156,42 @@ async function processOCR(imagePath, customPrompt = '', model = null, provider =
           url: `data:image/png;base64,${base64Image}`
         }
       });
+    }
+
+    // Add additional thumbnail images if provided (Multi-Image Vision Prompting)
+    if (pageImages && pageImages.length > 0 && outputFormat === 'markdown') {
+      const sharp = require('sharp');
+      // Limit to 10 images to avoid payload size issues
+      const limitedImages = pageImages.slice(0, 10);
+      for (const imgPath of limitedImages) {
+        try {
+          if (fs.existsSync(imgPath)) {
+            // Optimization: Resize and compress thumbnail to reduce API payload
+            // Max width/height 512px, convert to JPEG with 80% quality
+            const thumbBuffer = await sharp(imgPath)
+              .resize(512, 512, { fit: 'inside', withoutEnlargement: true })
+              .jpeg({ quality: 80 })
+              .toBuffer();
+
+            const thumbBase64 = thumbBuffer.toString('base64');
+            const thumbName = path.basename(imgPath);
+
+            userContent.push({
+              type: "text",
+              text: `Asset image to match: ${thumbName}`
+            });
+            userContent.push({
+              type: "image_url",
+              image_url: {
+                url: `data:image/jpeg;base64,${thumbBase64}`
+              }
+            });
+            logger.debug(`Included compressed thumbnail ${thumbName} in visual prompt`);
+          }
+        } catch (e) {
+          logger.warn(`Failed to add thumbnail ${imgPath} to prompt: ${e.message}`);
+        }
+      }
     }
 
     const requestData = {
