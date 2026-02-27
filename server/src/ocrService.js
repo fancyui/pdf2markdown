@@ -3,6 +3,7 @@ const {
   DEFAULT_PROMPT,
   HTML_PROMPT,
   TEXT_PROMPT,
+  DIRECTORY_PROMPT,
   PROVIDERS,
   DEFAULT_MAX_TOKENS,
   TEMPERATURE,
@@ -66,7 +67,7 @@ async function postProcessDocument(rawMarkdown) {
   }
 }
 
-async function processOCR(imagePath, customPrompt = '', model = null, provider = 'novita', outputFormat = 'markdown') {
+async function processOCR(imagePath, customPrompt = '', model = null, provider = 'novita', outputFormat = 'markdown', context = null) {
   let API_KEY;
   let API_BASE_URL;
 
@@ -100,9 +101,14 @@ async function processOCR(imagePath, customPrompt = '', model = null, provider =
     text: TEXT_PROMPT
   };
 
-  const promptSource = customPrompt ? 'custom' : `prompts/${outputFormat}.md`;
-  const prompt = customPrompt || FORMAT_PROMPTS[outputFormat] || DEFAULT_PROMPT;
+  let prompt = customPrompt || FORMAT_PROMPTS[outputFormat] || DEFAULT_PROMPT;
 
+  // Add context if provided
+  if (context) {
+    prompt = context + '\n\n' + prompt;
+  }
+
+  const promptSource = customPrompt ? 'custom' : `prompts/${outputFormat}.md`;
   logger.info(`Prompt source: ${promptSource}, length: ${prompt.length} chars`);
   logger.debug(`Prompt preview: ${prompt.substring(0, 150).replace(/\n/g, ' ')}...`);
 
@@ -179,7 +185,14 @@ async function processOCR(imagePath, customPrompt = '', model = null, provider =
     );
 
     logger.debug('API response received');
-    return response.data.choices[0].message.content || '';
+
+    // Validate response structure
+    if (!response.data || !response.data.choices || !response.data.choices[0]) {
+      logger.error('Unexpected API response:', JSON.stringify(response.data, null, 2));
+      throw new Error('API返回了意外的响应结构');
+    }
+
+    return response.data.choices[0].message?.content || '';
   } catch (error) {
     logger.error('API Error:', error.response?.data || error.message);
 

@@ -5,7 +5,7 @@ const cors = require('cors');
 const multer = require('multer');
 const fs = require('fs');
 const { processOCR } = require('./ocrService');
-const { handlePDFUpload, handleImageUpload } = require('./fileHandler');
+const { handlePDFUpload, handleImageUpload, handlePDFPartsUpload } = require('./fileHandler');
 const { DEFAULT_PROMPT } = require('./config');
 const logger = require('./logger');
 
@@ -99,6 +99,64 @@ app.post('/api/convert/pdf-stream', upload.single('file'), async (req, res) => {
     res.end();
   } catch (error) {
     logger.error('Error processing PDF stream:', error);
+    res.write(JSON.stringify({ error: error.message }) + '\n');
+    res.end();
+  }
+});
+
+// Parts mode: split PDF into parts and merge each part as long image
+app.post('/api/convert/pdf-parts', upload.single('file'), async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ error: 'No file uploaded' });
+    }
+
+    const customPrompt = req.body.prompt || '';
+    const { model, provider, appendContent, outputFormat, enablePostProcess } = req.body;
+
+    // Parse parts and directoryPages from JSON strings
+    let parts = [];
+    let directoryPages = null;
+
+    try {
+      if (req.body.parts) {
+        parts = JSON.parse(req.body.parts);
+      }
+      if (req.body.directoryPages) {
+        directoryPages = JSON.parse(req.body.directoryPages);
+      }
+    } catch (parseError) {
+      return res.status(400).json({ error: 'Invalid parts or directoryPages format' });
+    }
+
+    if (!parts || parts.length === 0) {
+      return res.status(400).json({ error: 'No parts specified' });
+    }
+
+    res.setHeader('Content-Type', 'application/json');
+    res.setHeader('Transfer-Encoding', 'chunked');
+
+    const onProgress = (data) => {
+      res.write(JSON.stringify(data) + '\n');
+    };
+
+    const result = await handlePDFPartsUpload(
+      req.file.path,
+      parts,
+      directoryPages,
+      customPrompt,
+      model,
+      provider,
+      onProgress,
+      appendContent,
+      outputFormat,
+      enablePostProcess === 'true'
+    );
+
+    res.write(JSON.stringify({ success: true, markdown: result }) + '\n');
+    res.end();
+  } catch (error) {
+    logger.error('Error processing PDF parts:', error);
     res.write(JSON.stringify({ error: error.message }) + '\n');
     res.end();
   }

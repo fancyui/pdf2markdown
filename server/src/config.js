@@ -19,6 +19,7 @@ module.exports = {
     HTML_PROMPT: loadPrompt('html.md'),
     TEXT_PROMPT: loadPrompt('text.md'),
     POST_PROCESS_PROMPT: loadPrompt('post-process.md'),
+    DIRECTORY_PROMPT: loadPrompt('directory.md'),
     POST_PROCESS_MODEL: 'google/gemini-3-flash-preview',
     POST_PROCESS_PROVIDER: 'openrouter',
     PROVIDERS: {
