@@ -117,10 +117,10 @@ async function processOCR(imagePath, customPrompt = '', model = null, provider =
 
   // Add image references if provided (for embedding extracted images in markdown)
   if (pageImages && pageImages.length > 0 && outputFormat === 'markdown') {
-    const imageHint = `\n\n[本页包含以下嵌入图片，请在识别到图片区域时引用。如果在 HTML 表格内部，必须使用 <img src="./images/文件名.png" width="200" /> 格式以确保显示]\n${pageImages.map(img => `![图片](${img})`).join('\n')
+    const imageHint = `\n\n[本页包含以下嵌入图片，请在识别到图片区域时引用。如果在 HTML 表格内部，必须使用 <img src="./images/文件名.png" width="200" /> 格式以确保显示]\n${pageImages.map(img => `![图片](./images/${path.basename(img)})`).join('\n')
       }`;
     prompt = prompt + imageHint;
-    logger.debug(`Added ${pageImages.length} image references to prompt`);
+    logger.debug(`Added ${pageImages.length} image hints to prompt`);
   }
 
   const promptSource = customPrompt ? 'custom' : `prompts/${outputFormat}.md`;

@@ -46,6 +46,7 @@ function App() {
 
   // Task and image states
   const [taskId, setTaskId] = useState(null);
+  const [outputFileName, setOutputFileName] = useState(null);
   const [images, setImages] = useState([]);
 
   // Part mode states
@@ -70,6 +71,7 @@ function App() {
     setSuccess('');
     setProgress(null);
     setTaskId(null);
+    setOutputFileName(null);
     setImages([]);
 
     try {
@@ -112,6 +114,7 @@ function App() {
       setMarkdown(result.markdown);
       if (result.taskId) {
         setTaskId(result.taskId);
+        setOutputFileName(result.outputFileName);
         setImages(result.images || []);
       }
       setSuccess('转换成功！');
@@ -154,6 +157,8 @@ function App() {
 
       if (data.success) {
         setMarkdown(data.markdown);
+        setTaskId(data.taskId);
+        setOutputFileName(data.outputFileName);
         setSuccess('转换成功！');
       } else {
         setError(data.error || '转换失败');
@@ -498,6 +503,18 @@ function App() {
                 {outputFormat === 'text' && '纯文本预览'}
               </Typography>
               <Box sx={{ display: 'flex', gap: 1 }}>
+                {taskId && outputFileName && (
+                  <Button
+                    variant="outlined"
+                    startIcon={<DownloadIcon />}
+                    component="a"
+                    href={`${process.env.REACT_APP_API_URL || 'http://localhost:3001/api'}/files/${taskId}/${outputFileName}${new URLSearchParams(window.location.search).get('token') ? `?token=${new URLSearchParams(window.location.search).get('token')}` : ''}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    查看已保存文件
+                  </Button>
+                )}
                 {images && images.length > 0 && (
                   <Button
                     variant="outlined"

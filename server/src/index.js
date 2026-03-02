@@ -101,7 +101,8 @@ app.post('/api/convert/pdf-stream', upload.single('file'), async (req, res) => {
       success: true,
       markdown: result.markdown,
       taskId: result.taskId,
-      images: result.images
+      images: result.images,
+      outputFileName: result.outputFileName
     }) + '\n');
     res.end();
   } catch (error) {
@@ -165,7 +166,8 @@ app.post('/api/convert/pdf-parts', upload.single('file'), async (req, res) => {
       success: true,
       markdown: result.markdown,
       taskId: result.taskId,
-      images: result.images
+      images: result.images,
+      outputFileName: result.outputFileName
     }) + '\n');
     res.end();
   } catch (error) {
@@ -185,7 +187,7 @@ app.post('/api/convert/image', upload.single('file'), async (req, res) => {
     const { model, provider, outputFormat } = req.body;
     const result = await handleImageUpload(req.file.path, customPrompt, model, provider, outputFormat);
 
-    res.json({ success: true, markdown: result });
+    res.json({ success: true, ...result });
   } catch (error) {
     logger.error('Error processing image:', error);
     res.status(500).json({ error: error.message });
@@ -201,9 +203,9 @@ app.post('/api/convert/image-url', async (req, res) => {
     }
 
     const customPrompt = prompt || '';
-    const result = await processOCR(imageUrl, customPrompt, model, provider, outputFormat);
+    const result = await handleImageUrlUpload(imageUrl, customPrompt, model, provider, outputFormat);
 
-    res.json({ success: true, markdown: result });
+    res.json({ success: true, ...result });
   } catch (error) {
     logger.error('Error processing image URL:', error);
     res.status(500).json({ error: error.message });
@@ -215,21 +217,13 @@ app.get('/api/health', (req, res) => {
 });
 
 // Serve extracted images
-app.get('/api/images/:taskId/:imageName', (req, res) => {
-  const { taskId, imageName } = req.params;
-  const imagePath = path.join(__dirname, '../../uploads', taskId, 'images', imageName);
-
-  if (!fs.existsSync(imagePath)) {
-    return res.status(404).json({ error: 'Image not found' });
-  }
-
-  res.sendFile(imagePath);
-});
+// Serve converted files and images statically
+app.use('/api/files', express.static(path.join(__dirname, '../uploads')));
 
 // Download all images as ZIP
 app.get('/api/download/images/:taskId', async (req, res) => {
   const { taskId } = req.params;
-  const imageDir = path.join(__dirname, '../../uploads', taskId, 'images');
+  const imageDir = path.join(__dirname, '../uploads', taskId, 'images');
 
   if (!fs.existsSync(imageDir)) {
     return res.status(404).json({ error: 'No images found for this task' });
