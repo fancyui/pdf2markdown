@@ -217,33 +217,13 @@ app.get('/api/health', (req, res) => {
 });
 
 // Serve extracted images
-app.get('/api/images/:taskId/:imageName', (req, res) => {
-  const { taskId, imageName } = req.params;
-  const imagePath = path.join(__dirname, '../../uploads', taskId, 'images', imageName);
-
-  if (!fs.existsSync(imagePath)) {
-    return res.status(404).json({ error: 'Image not found' });
-  }
-
-  res.sendFile(imagePath);
-});
-
-// Serve converted files
-app.get('/api/files/:taskId/:fileName', (req, res) => {
-  const { taskId, fileName } = req.params;
-  const filePath = path.join(__dirname, '../uploads', taskId, fileName);
-
-  if (!fs.existsSync(filePath)) {
-    return res.status(404).json({ error: 'File not found' });
-  }
-
-  res.sendFile(filePath);
-});
+// Serve converted files and images statically
+app.use('/api/files', express.static(path.join(__dirname, '../uploads')));
 
 // Download all images as ZIP
 app.get('/api/download/images/:taskId', async (req, res) => {
   const { taskId } = req.params;
-  const imageDir = path.join(__dirname, '../../uploads', taskId, 'images');
+  const imageDir = path.join(__dirname, '../uploads', taskId, 'images');
 
   if (!fs.existsSync(imageDir)) {
     return res.status(404).json({ error: 'No images found for this task' });
