@@ -268,6 +268,17 @@ ${headingRules ? `标题层级规则:\n${headingRules}\n` : ''}${directoryText ?
       finalResult += '\n\n' + appendContent.trim();
     }
 
+    // Automatically save to task directory
+    const outputExt = outputFormat === 'html' ? '.html' : (outputFormat === 'text' ? '.txt' : '.md');
+    const outputFileName = `converted-${Date.now()}${outputExt}`;
+    const outputFilePath = path.join(taskDir, outputFileName);
+
+    if (!fs.existsSync(taskDir)) {
+      fs.mkdirSync(taskDir, { recursive: true });
+    }
+    fs.writeFileSync(outputFilePath, finalResult);
+    logger.info(`Automatically saved output to: ${outputFilePath}`);
+
     return { markdown: finalResult, taskId, images: extractedImages };
   } catch (error) {
     logger.error('PDF parts processing failed:', error);
@@ -438,6 +449,17 @@ async function handlePDFUpload(filePath, customPrompt, model, provider, onProgre
     if (appendContent && appendContent.trim()) {
       finalResult += '\n\n' + appendContent.trim();
     }
+
+    // Automatically save to task directory
+    const outputExt = outputFormat === 'html' ? '.html' : (outputFormat === 'text' ? '.txt' : '.md');
+    const outputFileName = `converted-${Date.now()}${outputExt}`;
+    const outputFilePath = path.join(taskDir, outputFileName);
+
+    if (!fs.existsSync(taskDir)) {
+      fs.mkdirSync(taskDir, { recursive: true });
+    }
+    fs.writeFileSync(outputFilePath, finalResult);
+    logger.info(`Automatically saved output to: ${outputFilePath}`);
 
     return { markdown: finalResult, taskId, images: extractedImages };
   } catch (error) {
