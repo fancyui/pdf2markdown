@@ -101,7 +101,8 @@ app.post('/api/convert/pdf-stream', upload.single('file'), async (req, res) => {
       success: true,
       markdown: result.markdown,
       taskId: result.taskId,
-      images: result.images
+      images: result.images,
+      outputFileName: result.outputFileName
     }) + '\n');
     res.end();
   } catch (error) {
@@ -165,7 +166,8 @@ app.post('/api/convert/pdf-parts', upload.single('file'), async (req, res) => {
       success: true,
       markdown: result.markdown,
       taskId: result.taskId,
-      images: result.images
+      images: result.images,
+      outputFileName: result.outputFileName
     }) + '\n');
     res.end();
   } catch (error) {
@@ -185,7 +187,7 @@ app.post('/api/convert/image', upload.single('file'), async (req, res) => {
     const { model, provider, outputFormat } = req.body;
     const result = await handleImageUpload(req.file.path, customPrompt, model, provider, outputFormat);
 
-    res.json({ success: true, markdown: result });
+    res.json({ success: true, ...result });
   } catch (error) {
     logger.error('Error processing image:', error);
     res.status(500).json({ error: error.message });
@@ -201,9 +203,9 @@ app.post('/api/convert/image-url', async (req, res) => {
     }
 
     const customPrompt = prompt || '';
-    const result = await processOCR(imageUrl, customPrompt, model, provider, outputFormat);
+    const result = await handleImageUrlUpload(imageUrl, customPrompt, model, provider, outputFormat);
 
-    res.json({ success: true, markdown: result });
+    res.json({ success: true, ...result });
   } catch (error) {
     logger.error('Error processing image URL:', error);
     res.status(500).json({ error: error.message });
@@ -224,6 +226,18 @@ app.get('/api/images/:taskId/:imageName', (req, res) => {
   }
 
   res.sendFile(imagePath);
+});
+
+// Serve converted files
+app.get('/api/files/:taskId/:fileName', (req, res) => {
+  const { taskId, fileName } = req.params;
+  const filePath = path.join(__dirname, '../uploads', taskId, fileName);
+
+  if (!fs.existsSync(filePath)) {
+    return res.status(404).json({ error: 'File not found' });
+  }
+
+  res.sendFile(filePath);
 });
 
 // Download all images as ZIP
