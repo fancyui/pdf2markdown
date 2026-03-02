@@ -3,6 +3,7 @@ const path = require('path');
 const { processOCR, postProcessDocument } = require('./ocrService');
 const { DIRECTORY_PROMPT } = require('./config');
 const { mergeImagesVertically } = require('./imageUtils');
+const { extractImagesFromPDF, buildImageMap, generateTaskId } = require('./imageExtractor');
 const logger = require('./logger');
 
 /**
@@ -78,10 +79,15 @@ async function extractDirectory(imagePaths, directoryPages, model, provider) {
  * @param {string} appendContent - Content to append
  * @param {string} outputFormat - Output format
  * @param {boolean} enablePostProcess - Enable post-processing
- * @returns {Promise<string>} - Final markdown
+ * @returns {Promise<{markdown: string, taskId: string, images: Array}>} - Result with markdown, taskId and images
  */
 async function handlePDFPartsUpload(filePath, parts, directoryPages, customPrompt, model, provider, onProgress = null, appendContent = '', outputFormat = 'markdown', enablePostProcess = false) {
   logger.info(`Processing PDF with parts mode: ${parts.length} parts`);
+
+  // Generate task ID
+  const taskId = generateTaskId();
+  const taskDir = path.join('uploads', taskId);
+  const imageDir = path.join(taskDir, 'images');
 
   // Retry configuration
   const MAX_RETRIES = parseInt(process.env.OCR_MAX_RETRIES) || 3;
@@ -90,6 +96,28 @@ async function handlePDFPartsUpload(filePath, parts, directoryPages, customPromp
   try {
     const { convertPDFToImages } = require('./pdfUtils');
     const imagePaths = await convertPDFToImages(filePath);
+
+    // Extract images from PDF (collect all page ranges from parts)
+    let extractedImages = [];
+    try {
+      // Get all unique page ranges from parts
+      const allPages = new Set();
+      for (const part of parts) {
+        for (let p = part.startPage; p <= part.endPage; p++) {
+          allPages.add(p);
+        }
+      }
+      const minPage = Math.min(...allPages);
+      const maxPage = Math.max(...allPages);
+
+      extractedImages = await extractImagesFromPDF(filePath, imageDir, { start: minPage, end: maxPage });
+      logger.info(`Extracted ${extractedImages.length} images from PDF`);
+    } catch (imgError) {
+      logger.warn(`Image extraction failed (non-critical): ${imgError.message}`);
+    }
+
+    // Build image map for page-based image references
+    const imageMap = buildImageMap(extractedImages);
 
     logger.info(`PDF converted to ${imagePaths.length} pages`);
 
@@ -154,10 +182,20 @@ ${headingRules ? `标题层级规则:\n${headingRules}\n` : ''}${directoryText ?
       let content = '';
       let lastError = null;
 
+      // Get images for the page range of this part
+      const partExtractedImages = [];
+      for (let p = startPage; p <= endPage; p++) {
+        if (imageMap[p]) {
+          // Resolve to absolute paths for ocrService to read
+          const absPaths = imageMap[p].map(imgRel => path.join(process.cwd(), taskDir, imgRel.replace('./', '')));
+          partExtractedImages.push(...absPaths);
+        }
+      }
+
       for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
         try {
           logger.debug(`OCR attempt ${attempt}/${MAX_RETRIES} for part ${i + 1}`);
-          content = await processOCR(longImagePath, customPrompt, model, provider, outputFormat, contextPrompt);
+          content = await processOCR(longImagePath, customPrompt, model, provider, outputFormat, contextPrompt, partExtractedImages);
 
           // Log content length for debugging
           logger.info(`Part ${i + 1} OCR result: ${content.length} characters`);
@@ -230,19 +268,48 @@ ${headingRules ? `标题层级规则:\n${headingRules}\n` : ''}${directoryText ?
       finalResult += '\n\n' + appendContent.trim();
     }
 
-    return finalResult;
+    return { markdown: finalResult, taskId, images: extractedImages };
   } catch (error) {
     logger.error('PDF parts processing failed:', error);
     throw new Error(`PDF处理失败: ${error.message}`);
   }
 }
 
+/**
+ * Handle PDF upload with page-by-page processing
+ * @param {string} filePath - PDF file path
+ * @param {string} customPrompt - Custom prompt
+ * @param {string} model - Model to use
+ * @param {string} provider - Provider to use
+ * @param {function} onProgress - Progress callback
+ * @param {string} appendContent - Content to append
+ * @param {string} outputFormat - Output format
+ * @param {boolean} enablePostProcess - Enable post-processing
+ * @returns {Promise<{markdown: string, taskId: string, images: Array}>} - Result with markdown, taskId and images
+ */
 async function handlePDFUpload(filePath, customPrompt, model, provider, onProgress = null, appendContent = '', outputFormat = 'markdown', enablePostProcess = false) {
   logger.info('Processing PDF: converting each page to image for OCR');
+
+  // Generate task ID
+  const taskId = generateTaskId();
+  const taskDir = path.join('uploads', taskId);
+  const imageDir = path.join(taskDir, 'images');
 
   try {
     const { convertPDFToImages } = require('./pdfUtils');
     const imagePaths = await convertPDFToImages(filePath);
+
+    // Extract images from PDF
+    let extractedImages = [];
+    try {
+      extractedImages = await extractImagesFromPDF(filePath, imageDir);
+      logger.info(`Extracted ${extractedImages.length} images from PDF`);
+    } catch (imgError) {
+      logger.warn(`Image extraction failed (non-critical): ${imgError.message}`);
+    }
+
+    // Build image map for page-based image references
+    const imageMap = buildImageMap(extractedImages);
 
     if (onProgress) {
       onProgress({ type: 'progress', current: 0, total: imagePaths.length, status: 'splitting' });
@@ -259,11 +326,15 @@ async function handlePDFUpload(filePath, customPrompt, model, provider, onProgre
     // Process single page with retry logic
     const processPageWithRetry = async (index) => {
       let lastError;
+      const pageNum = index + 1; // 1-indexed page number
+      const pageRelImages = imageMap[pageNum] || [];
+      // Resolve to absolute paths for ocrService to read
+      const pageImages = pageRelImages.map(imgRel => path.join(process.cwd(), taskDir, imgRel.replace('./', '')));
 
       for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
         try {
           logger.debug(`Processing page ${index + 1}/${imagePaths.length} (attempt ${attempt}/${MAX_RETRIES})`);
-          const content = await processOCR(imagePaths[index], customPrompt, model, provider, outputFormat);
+          const content = await processOCR(imagePaths[index], customPrompt, model, provider, outputFormat, null, pageImages);
           return { index, content, success: true };
         } catch (error) {
           lastError = error;
@@ -368,13 +439,17 @@ async function handlePDFUpload(filePath, customPrompt, model, provider, onProgre
       finalResult += '\n\n' + appendContent.trim();
     }
 
-    return finalResult;
+    return { markdown: finalResult, taskId, images: extractedImages };
   } catch (error) {
     logger.error('PDF processing failed:', error);
     throw new Error(`PDF处理失败: ${error.message}`);
   }
 }
 
+/**
+ * Handle image file upload
+ * @returns {Promise<{markdown: string}>} - Result with markdown
+ */
 async function handleImageUpload(filePath, customPrompt, model, provider, outputFormat = 'markdown') {
   try {
     const markdownContent = await processOCR(filePath, customPrompt, model, provider, outputFormat);
