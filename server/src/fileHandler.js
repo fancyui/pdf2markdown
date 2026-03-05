@@ -7,6 +7,26 @@ const { extractImagesFromPDF, buildImageMap, generateTaskId } = require('./image
 const logger = require('./logger');
 
 /**
+ * Helper to save converted content to task directory
+ * @param {string} taskDir - Task directory
+ * @param {string} content - Converted content
+ * @param {string} outputFormat - Output format
+ * @returns {object} - {outputFileName, outputFilePath}
+ */
+function saveConvertedFile(taskDir, content, outputFormat) {
+  const outputExt = outputFormat === 'html' ? '.html' : (outputFormat === 'text' ? '.txt' : '.md');
+  const outputFileName = `converted-${Date.now()}${outputExt}`;
+  const outputFilePath = path.join(taskDir, outputFileName);
+
+  if (!fs.existsSync(taskDir)) {
+    fs.mkdirSync(taskDir, { recursive: true });
+  }
+  fs.writeFileSync(outputFilePath, content);
+  logger.info(`Automatically saved output to: ${outputFilePath}`);
+  return { outputFileName, outputFilePath };
+}
+
+/**
  * Extract directory text and heading rules from specified pages
  * @param {string[]} imagePaths - All page image paths
  * @param {object} directoryPages - {startPage, endPage} (1-indexed)
@@ -268,7 +288,10 @@ ${headingRules ? `标题层级规则:\n${headingRules}\n` : ''}${directoryText ?
       finalResult += '\n\n' + appendContent.trim();
     }
 
-    return { markdown: finalResult, taskId, images: extractedImages };
+    // Automatically save to task directory
+
+    const { outputFileName: savedName } = saveConvertedFile(taskDir, finalResult, outputFormat);
+    return { markdown: finalResult, taskId, images: extractedImages, outputFileName: savedName };
   } catch (error) {
     logger.error('PDF parts processing failed:', error);
     throw new Error(`PDF处理失败: ${error.message}`);
@@ -439,7 +462,10 @@ async function handlePDFUpload(filePath, customPrompt, model, provider, onProgre
       finalResult += '\n\n' + appendContent.trim();
     }
 
-    return { markdown: finalResult, taskId, images: extractedImages };
+    // Automatically save to task directory
+    const { outputFileName: savedName } = saveConvertedFile(taskDir, finalResult, outputFormat);
+
+    return { markdown: finalResult, taskId, images: extractedImages, outputFileName: savedName };
   } catch (error) {
     logger.error('PDF processing failed:', error);
     throw new Error(`PDF处理失败: ${error.message}`);
@@ -448,19 +474,42 @@ async function handlePDFUpload(filePath, customPrompt, model, provider, onProgre
 
 /**
  * Handle image file upload
- * @returns {Promise<{markdown: string}>} - Result with markdown
+ * @returns {Promise<{markdown: string, taskId: string, outputFileName: string}>} - Result with markdown, taskId and filename
  */
 async function handleImageUpload(filePath, customPrompt, model, provider, outputFormat = 'markdown') {
   try {
     const markdownContent = await processOCR(filePath, customPrompt, model, provider, outputFormat);
 
+    const taskId = generateTaskId();
+    const taskDir = path.join('uploads', taskId);
+    const { outputFileName } = saveConvertedFile(taskDir, markdownContent, outputFormat);
+
     fs.unlinkSync(filePath);
 
-    return markdownContent;
+    return { markdown: markdownContent, taskId, outputFileName };
   } catch (error) {
     logger.error('Error processing image:', error);
     throw error;
   }
 }
 
-module.exports = { handlePDFUpload, handleImageUpload, handlePDFPartsUpload, extractDirectory };
+/**
+ * Handle image URL conversion
+ * @returns {Promise<{markdown: string, taskId: string, outputFileName: string}>} - Result with markdown, taskId and filename
+ */
+async function handleImageUrlUpload(imageUrl, customPrompt, model, provider, outputFormat = 'markdown') {
+  try {
+    const markdownContent = await processOCR(imageUrl, customPrompt, model, provider, outputFormat);
+
+    const taskId = generateTaskId();
+    const taskDir = path.join('uploads', taskId);
+    const { outputFileName } = saveConvertedFile(taskDir, markdownContent, outputFormat);
+
+    return { markdown: markdownContent, taskId, outputFileName };
+  } catch (error) {
+    logger.error('Error processing image URL:', error);
+    throw error;
+  }
+}
+
+module.exports = { handlePDFUpload, handleImageUpload, handlePDFPartsUpload, handleImageUrlUpload, extractDirectory };

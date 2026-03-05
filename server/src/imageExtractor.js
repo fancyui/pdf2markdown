@@ -6,7 +6,7 @@ const sharp = require('sharp');
 const logger = require('./logger');
 
 // Configuration for pdfimages binary
-const PDFIMAGES_BIN = '/Volumes/macu/programs/xpdf-tools-mac-4.06/bin64/pdfimages';
+const PDFIMAGES_BIN = process.env.PDFIMAGES_BIN || 'pdfimages';
 
 /**
  * Extract embedded images from a PDF file using pdfimages CLI

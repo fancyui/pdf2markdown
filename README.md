@@ -9,6 +9,8 @@
 - **并行处理**：多页 PDF 并行 OCR，大幅提升处理速度
 - **智能重试**：失败自动重试，指数退避策略
 - **AI 后处理**：自动去除页眉页脚、合并跨页表格
+- **图片提取**：自动从 PDF 中提取嵌入的图片，支持掩码合并和去重
+- **目录解析**：支持根据目录大纲和标题层级规则进行智能解析
 - **自定义追加**：可在文档末尾追加品牌信息
 - **简单认证**：支持 Token 访问控制
 - **提示词分离**：提示词存储在独立 .md 文件中，便于管理
@@ -16,8 +18,8 @@
 ## 🛠 技术栈
 
 - **前端**: React + Material-UI
-- **后端**: Node.js + Express
-- **PDF处理**: pdftoimg-js (纯 JS，无需系统依赖)
+- **后端**: Node.js + Express + Sharp
+- **PDF处理**: pdftoimg-js (页面转图) + xpdf-tools (图片提取)
 - **OCR**: 支持 Novita AI / OpenRouter 多种模型
 
 ## 📦 安装
@@ -28,8 +30,11 @@
 cd server
 npm install
 cp .env.example .env
-# 编辑 .env 填入你的 API 密钥
+# 编辑 .env 填入你的 API 密钥和 pdfimages 路径
 ```
+
+> [!IMPORTANT]
+> 图片提取功能需要安装 **xpdf-tools**。请从 [xpdfreader.com](https://www.xpdfreader.com/download.html) 下载对应系统的二进制文件，并在 `.env` 中配置 `PDFIMAGES_BIN` 的路径。
 
 ### 前端
 
@@ -60,6 +65,9 @@ OCR_RETRY_DELAY=2000   # 重试延时 (ms)
 
 # 访问控制 (留空则不启用)
 ACCESS_TOKEN=your-secret-token
+
+# 图片提取工具路径 (xpdf-tools)
+PDFIMAGES_BIN=C:\path\to\xpdf-tools\bin64\pdfimages.exe
 ```
 
 Nginx 配置示例：
@@ -121,6 +129,7 @@ pdf2markdown/
 │       ├── config.js       # 加载提示词
 │       ├── ocrService.js   # OCR API 调用
 │       ├── fileHandler.js  # 文件处理 & 并发控制
+│       ├── imageExtractor.js # PDF 图片提取逻辑
 │       └── logger.js       # 日志工具
 └── prompts/                # 提示词文件 (可自定义)
     ├── markdown.md         # Markdown 格式提示词
