@@ -99,6 +99,17 @@ export const checkHealth = async () => {
 };
 
 /**
+ * Fetch the selectable models per provider from the server.
+ * OpenRouter options are configured in server/.env (OPENROUTER_MODEL / OPENROUTER_MODELS).
+ * @returns {Promise<Object>} - { novita: {default, models:[{value,label}]}, openrouter: {...} }
+ */
+export const getModels = async () => {
+  const token = getToken();
+  const response = await axios.get(`${API_BASE_URL}/models${token ? `?token=${token}` : ''}`);
+  return response.data;
+};
+
+/**
  * Convert PDF with parts mode - each part is merged into a long image for OCR
  * @param {File} file - PDF file
  * @param {Array} parts - [{startPage, endPage, title}]

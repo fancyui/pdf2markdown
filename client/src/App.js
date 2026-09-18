@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Container,
   Paper,
@@ -25,16 +25,19 @@ import {
 } from '@mui/icons-material';
 import FileUpload from './components/FileUpload';
 import MarkdownPreview from './components/MarkdownPreview';
-import { convertFile, convertFileStream, convertPDFParts } from './services/api';
+import { convertFile, convertFileStream, convertPDFParts, getModels } from './services/api';
 import { PROVIDER_MODELS, DEFAULT_APPEND_CONTENT } from './config';
+
+const DEFAULT_PROVIDER = 'novita';
 
 function App() {
   const [activeTab, setActiveTab] = useState('pdf');
   const [markdown, setMarkdown] = useState('');
   const [prompt, setPrompt] = useState('');
   const [imageUrl, setImageUrl] = useState('');
-  const [selectedProvider, setSelectedProvider] = useState('novita');
-  const [selectedModel, setSelectedModel] = useState(PROVIDER_MODELS.novita[0].value);
+  const [selectedProvider, setSelectedProvider] = useState(DEFAULT_PROVIDER);
+  const [selectedModel, setSelectedModel] = useState(PROVIDER_MODELS[DEFAULT_PROVIDER][0].value);
+  const [providerModels, setProviderModels] = useState(PROVIDER_MODELS);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
@@ -55,10 +58,39 @@ function App() {
   const [enableDirectory, setEnableDirectory] = useState(false);
   const [directoryPages, setDirectoryPages] = useState({ startPage: 1, endPage: 1 });
 
+  // Model options come from the server (server/.env); built-in config is the fallback
+  useEffect(() => {
+    let cancelled = false;
+
+    getModels()
+      .then((data) => {
+        if (cancelled || !data) return;
+        const next = {};
+        Object.keys(PROVIDER_MODELS).forEach((provider) => {
+          const remote = data[provider];
+          next[provider] = Array.isArray(remote?.models) && remote.models.length
+            ? remote.models
+            : PROVIDER_MODELS[provider];
+        });
+        setProviderModels(next);
+
+        const remoteDefault = data[DEFAULT_PROVIDER]?.default;
+        if (remoteDefault && next[DEFAULT_PROVIDER].some((option) => option.value === remoteDefault)) {
+          setSelectedModel(remoteDefault);
+        }
+      })
+      .catch((error) => {
+        console.warn('Failed to load model options from server, using built-in defaults:', error.message);
+      });
+
+    return () => { cancelled = true; };
+  }, []);
+
   const handleProviderChange = (e) => {
     const provider = e.target.value;
     setSelectedProvider(provider);
-    setSelectedModel(PROVIDER_MODELS[provider][0].value);
+    const options = providerModels[provider] || PROVIDER_MODELS[provider] || [];
+    setSelectedModel(options[0]?.value || '');
   };
 
   const handleTabChange = (event, newValue) => {
@@ -277,7 +309,7 @@ function App() {
               native: true,
             }}
           >
-            {PROVIDER_MODELS[selectedProvider].map((option) => (
+            {(providerModels[selectedProvider] || PROVIDER_MODELS[selectedProvider] || []).map((option) => (
               <option key={option.value} value={option.value}>
                 {option.label}
               </option>

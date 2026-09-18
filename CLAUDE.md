@@ -54,11 +54,17 @@ cd client && npm run build
 
 Environment variables in `server/.env`:
 - `NOVITA_API_KEY` / `OPENROUTER_API_KEY` - API keys (at least one required)
+- `OPENROUTER_MODEL` - Default OpenRouter OCR model (default: `google/gemini-3-flash-preview`)
+- `OPENROUTER_MODELS` - Comma-separated OpenRouter dropdown options, `vendor/model` or `vendor/model|Display Label`; the default model is always kept in the list
+- `OPENROUTER_MAX_TOKENS` - Fallback `max_tokens` for OpenRouter models without a known limit
+- `API_MODEL` / `API_BASE_URL` - Novita default model and endpoint
 - `OCR_CONCURRENCY=3` - Parallel page processing limit
 - `OCR_MAX_RETRIES=3` - Retry attempts per page
 - `OCR_RETRY_DELAY=2000` - Base retry delay (ms), exponential backoff
 - `ACCESS_TOKEN` - Optional auth token
 - `LOG_LEVEL` - debug/info/warn/error/silent
+
+Model options reach the UI through `GET /api/models` (`getProviderModels()` in `server/src/config.js`), so changing `server/.env` only needs a server restart — no client rebuild.
 
 ## Prompts
 
@@ -76,5 +82,6 @@ Modify prompts directly in these files; restart server to apply changes.
 - `POST /api/convert/image` - Image file conversion
 - `POST /api/convert/image-url` - Image URL conversion
 - `GET /api/health` - Health check
+- `GET /api/models` - Selectable models per provider (OpenRouter list comes from `server/.env`)
 
 All `/api/*` routes require `ACCESS_TOKEN` if configured (via query param, header, or body).

@@ -6,6 +6,7 @@ const {
   TEXT_PROMPT,
   DIRECTORY_PROMPT,
   PROVIDERS,
+  getModelMaxTokens,
   DEFAULT_MAX_TOKENS,
   TEMPERATURE,
   TOP_P,
@@ -83,9 +84,8 @@ async function processOCR(imagePath, customPrompt = '', model = null, provider =
   const providerConfig = PROVIDERS[provider] || PROVIDERS.novita;
   const API_MODEL = model || (provider === 'novita' ? (process.env.API_MODEL || providerConfig.default) : providerConfig.default);
 
-  // Get model-specific maxTokens or use default
-  const modelConfig = providerConfig.models[API_MODEL];
-  const maxTokens = modelConfig?.maxTokens || DEFAULT_MAX_TOKENS;
+  // Model-specific maxTokens (env-configurable for OpenRouter), or provider default
+  const maxTokens = getModelMaxTokens(provider, API_MODEL);
 
   logger.info(`Using model: ${API_MODEL}, maxTokens: ${maxTokens}, format: ${outputFormat}`);
 

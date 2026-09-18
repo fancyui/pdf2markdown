@@ -7,7 +7,7 @@ const fs = require('fs');
 const archiver = require('archiver');
 const { processOCR } = require('./ocrService');
 const { handlePDFUpload, handleImageUpload, handlePDFPartsUpload } = require('./fileHandler');
-const { DEFAULT_PROMPT } = require('./config');
+const { DEFAULT_PROMPT, getProviderModels } = require('./config');
 const logger = require('./logger');
 
 const app = express();
@@ -214,6 +214,11 @@ app.post('/api/convert/image-url', async (req, res) => {
 
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', message: 'Server is running' });
+});
+
+// Available models per provider (openrouter options come from server/.env)
+app.get('/api/models', (req, res) => {
+  res.json(getProviderModels());
 });
 
 // Serve extracted images
