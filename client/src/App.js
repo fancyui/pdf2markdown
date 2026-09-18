@@ -26,9 +26,13 @@ import {
 import FileUpload from './components/FileUpload';
 import MarkdownPreview from './components/MarkdownPreview';
 import { convertFile, convertFileStream, convertPDFParts, getModels } from './services/api';
-import { PROVIDER_MODELS, DEFAULT_APPEND_CONTENT } from './config';
+import { PROVIDER_MODELS, PROVIDER_IDS, DEFAULT_APPEND_CONTENT } from './config';
 
-const DEFAULT_PROVIDER = 'novita';
+const DEFAULT_PROVIDER = PROVIDER_IDS[0];
+const PROVIDER_LABELS = {
+  novita: 'Novita AI',
+  openrouter: 'OpenRouter'
+};
 
 function App() {
   const [activeTab, setActiveTab] = useState('pdf');
@@ -38,6 +42,8 @@ function App() {
   const [selectedProvider, setSelectedProvider] = useState(DEFAULT_PROVIDER);
   const [selectedModel, setSelectedModel] = useState(PROVIDER_MODELS[DEFAULT_PROVIDER][0].value);
   const [providerModels, setProviderModels] = useState(PROVIDER_MODELS);
+  const [modelsLoaded, setModelsLoaded] = useState(false); // GET /api/models finished (ok or failed)
+  const [modelsError, setModelsError] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
@@ -58,7 +64,8 @@ function App() {
   const [enableDirectory, setEnableDirectory] = useState(false);
   const [directoryPages, setDirectoryPages] = useState({ startPage: 1, endPage: 1 });
 
-  // Model options come from the server (server/.env); built-in config is the fallback
+  // Model options come from the server (server/.env). OpenRouter has no built-in
+  // list: an empty list means OPENROUTER_MODEL / OPENROUTER_MODELS is missing.
   useEffect(() => {
     let cancelled = false;
 
@@ -66,11 +73,11 @@ function App() {
       .then((data) => {
         if (cancelled || !data) return;
         const next = {};
-        Object.keys(PROVIDER_MODELS).forEach((provider) => {
+        PROVIDER_IDS.forEach((provider) => {
           const remote = data[provider];
           next[provider] = Array.isArray(remote?.models) && remote.models.length
             ? remote.models
-            : PROVIDER_MODELS[provider];
+            : (PROVIDER_MODELS[provider] || []);
         });
         setProviderModels(next);
 
@@ -81,6 +88,10 @@ function App() {
       })
       .catch((error) => {
         console.warn('Failed to load model options from server, using built-in defaults:', error.message);
+        setModelsError(error.message);
+      })
+      .finally(() => {
+        if (!cancelled) setModelsLoaded(true);
       });
 
     return () => { cancelled = true; };
@@ -295,8 +306,11 @@ function App() {
               native: true,
             }}
           >
-            <option value="novita">Novita AI</option>
-            <option value="openrouter">OpenRouter</option>
+            {PROVIDER_IDS.map((provider) => (
+              <option key={provider} value={provider}>
+                {PROVIDER_LABELS[provider] || provider}
+              </option>
+            ))}
           </TextField>
           <TextField
             select
@@ -309,11 +323,21 @@ function App() {
               native: true,
             }}
           >
-            {(providerModels[selectedProvider] || PROVIDER_MODELS[selectedProvider] || []).map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
+            {(providerModels[selectedProvider] || []).length === 0 ? (
+              <option value="">
+                {!modelsLoaded
+                  ? '加载中…'
+                  : modelsError
+                    ? '模型列表加载失败（检查后端服务）'
+                    : '未配置模型（见 server/.env）'}
               </option>
-            ))}
+            ) : (
+              (providerModels[selectedProvider] || []).map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))
+            )}
           </TextField>
           <TextField
             select

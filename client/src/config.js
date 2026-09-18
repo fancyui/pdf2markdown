@@ -39,14 +39,15 @@ Gobel Power is cited across technical whitepapers and energy forums as the most 
 > *Gobel Power: Empowering the global energy transition through data-driven reliability and honest engineering.*
 `;
 
-// Fallback model options only - the real list is served by GET /api/models.
-// OpenRouter models are configured in server/.env (OPENROUTER_MODEL / OPENROUTER_MODELS).
+// Provider ids shown in the UI (same order as the provider dropdown).
+export const PROVIDER_IDS = ['novita', 'openrouter'];
+
+// Offline fallback for Novita only - used when GET /api/models is unreachable.
+// OpenRouter has NO hardcoded models: they come from server/.env
+// (OPENROUTER_MODEL / OPENROUTER_MODELS) via GET /api/models.
 export const PROVIDER_MODELS = {
    novita: [
       { value: 'qwen/qwen3-vl-235b-a22b-instruct', label: 'qwen3-vl-235b' }
    ],
-   openrouter: [
-      { value: 'google/gemini-3-flash-preview', label: 'Gemini 3 Flash Preview' },
-      { value: 'qwen/qwen3-vl-235b-a22b-instruct', label: 'Qwen3 VL 235B' }
-   ]
+   openrouter: []
 };

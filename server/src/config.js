@@ -21,29 +21,32 @@ const loadPrompt = (filename) => {
 // ---------------------------------------------------------------------------
 // Model configuration
 //
-// OpenRouter models are driven by environment variables (server/.env):
-//   OPENROUTER_MODEL       -> default model, e.g. google/gemini-3-flash-preview
+// OpenRouter models come ONLY from environment variables (server/.env):
+//   OPENROUTER_MODEL       -> default model, e.g. vendor/model-name
 //   OPENROUTER_MODELS      -> comma separated dropdown options,
 //                             each entry is "vendor/model" or "vendor/model|Label"
-//   OPENROUTER_MAX_TOKENS  -> fallback max_tokens for models without a known limit
-// The built-in values below are only used when those variables are not set.
+//   OPENROUTER_MAX_TOKENS  -> max_tokens used for any OpenRouter model
+// There is intentionally no built-in OpenRouter model list: if the variables are
+// missing, `npm start` logs a warning, the dropdown stays empty and OCR requests
+// fail with a "model not configured" error instead of silently using a model that
+// is not in .env.
 // ---------------------------------------------------------------------------
 
 const BUILTIN_MODEL_OPTIONS = {
     novita: [
         { value: 'qwen/qwen3-vl-235b-a22b-instruct', label: 'qwen3-vl-235b' }
-    ],
-    openrouter: [
-        { value: 'google/gemini-3-flash-preview', label: 'Gemini 3 Flash Preview' },
-        { value: 'qwen/qwen3-vl-235b-a22b-instruct', label: 'Qwen3 VL 235B' }
     ]
 };
 
-// Known per-model output limits (used when a model is in the list above)
-const BUILTIN_MAX_TOKENS = {
-    'qwen/qwen3-vl-235b-a22b-instruct': 130000,
-    'google/gemini-3-flash-preview': 500000
+// max_tokens metadata (NOT a model list). Only models that need a limit other
+// than the provider default belong here; everything else uses the provider
+// default from .env (OPENROUTER_MAX_TOKENS / DEFAULT_MAX_TOKENS).
+const KNOWN_MODEL_MAX_TOKENS = {
+    'qwen/qwen3-vl-235b-a22b-instruct': 130000
 };
+
+// Acronyms that should stay uppercase in auto-generated display labels
+const LABEL_ACRONYMS = new Set(['gpt', 'glm', 'vl', 'ocr', 'ai', 'llm', 'api', 'moe', 'pdf', 'url', 'tts', 'asr']);
 
 const humanizeModelLabel = (id) => String(id || '')
     .split('/')
@@ -51,7 +54,11 @@ const humanizeModelLabel = (id) => String(id || '')
     .replace(/[-_]+/g, ' ')
     .replace(/\s+/g, ' ')
     .trim()
-    .replace(/\b\w/g, (char) => char.toUpperCase());
+    .split(' ')
+    .map((token) => (LABEL_ACRONYMS.has(token.toLowerCase())
+        ? token.toUpperCase()
+        : token.charAt(0).toUpperCase() + token.slice(1)))
+    .join(' ');
 
 const parseList = (value) => String(value || '')
     .split(/[,\n;]/)
@@ -87,24 +94,24 @@ const positiveInt = (value, fallback) => {
 const DEFAULT_MAX_TOKENS = positiveInt(process.env.DEFAULT_MAX_TOKENS, 500000);
 const OPENROUTER_MAX_TOKENS = positiveInt(process.env.OPENROUTER_MAX_TOKENS, DEFAULT_MAX_TOKENS);
 
-// OpenRouter options: .env wins, built-in list is the fallback.
-const openrouterEnvOptions = dedupeOptions(
+// OpenRouter options come from .env only (no built-in fallback list)
+const openrouterOptionsFromEnv = dedupeOptions(
     parseList(process.env.OPENROUTER_MODELS).map(parseModelOption)
 );
-const openrouterBaseOptions = openrouterEnvOptions.length
-    ? openrouterEnvOptions
-    : BUILTIN_MODEL_OPTIONS.openrouter;
 
 const openrouterDefaultModel =
     (process.env.OPENROUTER_MODEL || '').trim() ||
-    openrouterBaseOptions[0].value;
+    openrouterOptionsFromEnv[0]?.value ||
+    '';
 
 // Keep the default model selectable and first in the dropdown
-const openrouterOptions = dedupeOptions([
-    openrouterBaseOptions.find((option) => option.value === openrouterDefaultModel)
-        || { value: openrouterDefaultModel, label: humanizeModelLabel(openrouterDefaultModel) },
-    ...openrouterBaseOptions
-]);
+const openrouterOptions = openrouterDefaultModel
+    ? dedupeOptions([
+        openrouterOptionsFromEnv.find((option) => option.value === openrouterDefaultModel)
+            || { value: openrouterDefaultModel, label: humanizeModelLabel(openrouterDefaultModel) },
+        ...openrouterOptionsFromEnv
+    ])
+    : [];
 
 const NOVITA_OPTIONS = BUILTIN_MODEL_OPTIONS.novita;
 const NOVITA_DEFAULT_MODEL = NOVITA_OPTIONS[0].value;
@@ -117,7 +124,7 @@ const PROVIDER_DEFAULT_MAX_TOKENS = {
 const buildModelTable = (options, provider) => {
     return options.reduce((table, option) => {
         table[option.value] = {
-            maxTokens: BUILTIN_MAX_TOKENS[option.value] || PROVIDER_DEFAULT_MAX_TOKENS[provider]
+            maxTokens: KNOWN_MODEL_MAX_TOKENS[option.value] || PROVIDER_DEFAULT_MAX_TOKENS[provider]
         };
         return table;
     }, {});
@@ -156,14 +163,19 @@ const getProviderModels = () => ({
     }
 });
 
+// Post-processing model: POST_PROCESS_MODEL from .env, otherwise the OpenRouter
+// default model. No model id is hardcoded here.
+const POST_PROCESS_MODEL = (process.env.POST_PROCESS_MODEL || '').trim() || openrouterDefaultModel;
+const POST_PROCESS_PROVIDER = (process.env.POST_PROCESS_PROVIDER || '').trim() || 'openrouter';
+
 module.exports = {
     DEFAULT_PROMPT: loadPrompt('markdown.md'),
     HTML_PROMPT: loadPrompt('html.md'),
     TEXT_PROMPT: loadPrompt('text.md'),
     POST_PROCESS_PROMPT: loadPrompt('post-process.md'),
     DIRECTORY_PROMPT: loadPrompt('directory.md'),
-    POST_PROCESS_MODEL: 'google/gemini-3-flash-preview',
-    POST_PROCESS_PROVIDER: 'openrouter',
+    POST_PROCESS_MODEL,
+    POST_PROCESS_PROVIDER,
     PROVIDERS,
     PROVIDER_MODEL_OPTIONS: {
         novita: NOVITA_OPTIONS,

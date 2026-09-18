@@ -26,6 +26,11 @@ async function postProcessDocument(rawMarkdown) {
     return rawMarkdown;
   }
 
+  if (!API_MODEL) {
+    logger.warn('No post-processing model configured (POST_PROCESS_MODEL / OPENROUTER_MODEL), skipping post-processing');
+    return rawMarkdown;
+  }
+
   try {
     logger.info('Starting AI post-processing with model:', API_MODEL);
 
@@ -91,6 +96,14 @@ async function processOCR(imagePath, customPrompt = '', model = null, provider =
 
   if (!API_KEY) {
     throw new Error(`${provider.toUpperCase()}_API_KEY is not set in environment variables`);
+  }
+
+  if (!API_MODEL) {
+    throw new Error(
+      provider === 'openrouter'
+        ? '未配置 OpenRouter 模型，请在 server/.env 中设置 OPENROUTER_MODEL（或 OPENROUTER_MODELS）'
+        : '未配置模型，请设置环境变量 API_MODEL'
+    );
   }
 
   const fs = require('fs');

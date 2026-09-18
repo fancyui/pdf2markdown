@@ -256,6 +256,14 @@ app.get('/api/download/images/:taskId', async (req, res) => {
 const server = app.listen(PORT, () => {
   logger.always(`Server running on port ${PORT}`);
   logger.always(`Health check: http://localhost:${PORT}/api/health`);
+
+  // OpenRouter models are configured only through .env - warn when they are missing
+  const { openrouter } = getProviderModels();
+  if (!openrouter.models.length) {
+    logger.warn('No OpenRouter models configured. Set OPENROUTER_MODEL / OPENROUTER_MODELS in server/.env.');
+  } else {
+    logger.always(`OpenRouter models: ${openrouter.models.map((option) => option.value).join(', ')} (default: ${openrouter.default})`);
+  }
 });
 
 // Set server timeout to 1 hour (3600000 ms)

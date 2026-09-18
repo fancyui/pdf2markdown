@@ -54,9 +54,10 @@ cd client && npm run build
 
 Environment variables in `server/.env`:
 - `NOVITA_API_KEY` / `OPENROUTER_API_KEY` - API keys (at least one required)
-- `OPENROUTER_MODEL` - Default OpenRouter OCR model (default: `google/gemini-3-flash-preview`)
+- `OPENROUTER_MODEL` - Default OpenRouter OCR model (no code default: required for OpenRouter)
 - `OPENROUTER_MODELS` - Comma-separated OpenRouter dropdown options, `vendor/model` or `vendor/model|Display Label`; the default model is always kept in the list
-- `OPENROUTER_MAX_TOKENS` - Fallback `max_tokens` for OpenRouter models without a known limit
+- `OPENROUTER_MAX_TOKENS` - `max_tokens` used for OpenRouter models (default 500000)
+- `POST_PROCESS_MODEL` / `POST_PROCESS_PROVIDER` - Optional AI post-processing model (defaults to `OPENROUTER_MODEL`)
 - `API_MODEL` / `API_BASE_URL` - Novita default model and endpoint
 - `OCR_CONCURRENCY=3` - Parallel page processing limit
 - `OCR_MAX_RETRIES=3` - Retry attempts per page
@@ -64,7 +65,7 @@ Environment variables in `server/.env`:
 - `ACCESS_TOKEN` - Optional auth token
 - `LOG_LEVEL` - debug/info/warn/error/silent
 
-Model options reach the UI through `GET /api/models` (`getProviderModels()` in `server/src/config.js`), so changing `server/.env` only needs a server restart — no client rebuild.
+Model options reach the UI through `GET /api/models` (`getProviderModels()` in `server/src/config.js`), so changing `server/.env` only needs a server restart — no client rebuild. OpenRouter model ids are never hardcoded: neither `server/src/config.js` nor `client/src/config.js` holds an OpenRouter model list, and a missing `OPENROUTER_MODEL`/`OPENROUTER_MODELS` yields an empty dropdown, a startup warning, and a clear error at request time.
 
 ## Prompts
 

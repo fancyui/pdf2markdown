@@ -35,10 +35,10 @@ OPENROUTER_API_KEY=your_openrouter_api_key
 PORT=3001
 LOG_LEVEL=info
 
-# OpenRouter 模型配置 (provider=openrouter 时使用)
+# OpenRouter 模型配置：模型只在这里定义，代码里没有任何内置的 OpenRouter 模型
 OPENROUTER_MODEL=google/gemini-3-flash-preview        # 默认模型
 OPENROUTER_MODELS=google/gemini-3-flash-preview|Gemini 3 Flash Preview,qwen/qwen3-vl-235b-a22b-instruct|Qwen3 VL 235B  # 前端下拉候选
-OPENROUTER_MAX_TOKENS=500000                          # 未知模型的 max_tokens 回退值
+OPENROUTER_MAX_TOKENS=500000                          # OpenRouter 模型使用的 max_tokens
 
 # OCR 并发配置
 OCR_CONCURRENCY=3
