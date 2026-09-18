@@ -25,7 +25,7 @@ import {
 } from '@mui/icons-material';
 import FileUpload from './components/FileUpload';
 import MarkdownPreview from './components/MarkdownPreview';
-import { convertFile, convertFileStream, convertPDFParts, getModels } from './services/api';
+import { convertFile, convertFileStream, convertPDFParts, getModels, getToken } from './services/api';
 import { PROVIDER_MODELS, PROVIDER_IDS, DEFAULT_APPEND_CONTENT } from './config';
 
 const DEFAULT_PROVIDER = PROVIDER_IDS[0];
@@ -87,8 +87,10 @@ function App() {
         }
       })
       .catch((error) => {
-        console.warn('Failed to load model options from server, using built-in defaults:', error.message);
+        console.warn('Failed to load model options from server:', error.message);
         setModelsError(error.message);
+        // 401 / unreachable backend: surface the reason instead of an empty dropdown
+        setError(error.message);
       })
       .finally(() => {
         if (!cancelled) setModelsLoaded(true);
@@ -181,7 +183,7 @@ function App() {
 
     try {
       const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:3001/api';
-      const token = new URLSearchParams(window.location.search).get('token') || '';
+      const token = getToken();
       const response = await fetch(`${API_BASE_URL}/convert/image-url${token ? `?token=${token}` : ''}`, {
         method: 'POST',
         headers: {
@@ -235,7 +237,7 @@ function App() {
   const handleDownloadImages = () => {
     if (!taskId) return;
     const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:3001/api';
-    const token = new URLSearchParams(window.location.search).get('token') || '';
+    const token = getToken();
     window.open(`${API_BASE_URL}/download/images/${taskId}${token ? `?token=${token}` : ''}`);
   };
 
@@ -328,7 +330,7 @@ function App() {
                 {!modelsLoaded
                   ? '加载中…'
                   : modelsError
-                    ? '模型列表加载失败（检查后端服务）'
+                    ? '模型列表不可用（见错误提示）'
                     : '未配置模型（见 server/.env）'}
               </option>
             ) : (
@@ -564,7 +566,7 @@ function App() {
                     variant="outlined"
                     startIcon={<DownloadIcon />}
                     component="a"
-                    href={`${process.env.REACT_APP_API_URL || 'http://localhost:3001/api'}/files/${taskId}/${outputFileName}${new URLSearchParams(window.location.search).get('token') ? `?token=${new URLSearchParams(window.location.search).get('token')}` : ''}`}
+                    href={`${process.env.REACT_APP_API_URL || 'http://localhost:3001/api'}/files/${taskId}/${outputFileName}${getToken() ? `?token=${getToken()}` : ''}`}
                     target="_blank"
                     rel="noopener noreferrer"
                   >

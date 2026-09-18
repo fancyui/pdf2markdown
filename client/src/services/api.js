@@ -2,10 +2,41 @@ import axios from 'axios';
 
 const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:3001/api';
 
-// Extract token from URL query parameter
-const getToken = () => {
-  const urlParams = new URLSearchParams(window.location.search);
-  return urlParams.get('token') || '';
+const TOKEN_STORAGE_KEY = 'pdf2markdown.accessToken';
+
+const readStoredToken = () => {
+  try {
+    return window.localStorage.getItem(TOKEN_STORAGE_KEY) || '';
+  } catch (error) {
+    return '';
+  }
+};
+
+const storeToken = (token) => {
+  try {
+    window.localStorage.setItem(TOKEN_STORAGE_KEY, token);
+  } catch (error) {
+    /* storage unavailable (private mode) - URL token still works */
+  }
+};
+
+export const clearStoredToken = () => {
+  try {
+    window.localStorage.removeItem(TOKEN_STORAGE_KEY);
+  } catch (error) {
+    /* ignore */
+  }
+};
+
+// Token comes from ?token=... and is remembered, so later visits without the
+// query string keep working (server/.env ACCESS_TOKEN must match).
+export const getToken = () => {
+  const urlToken = new URLSearchParams(window.location.search).get('token') || '';
+  if (urlToken) {
+    storeToken(urlToken);
+    return urlToken;
+  }
+  return readStoredToken();
 };
 
 export const convertFile = async (file, type, prompt = '', model = '', provider = 'novita', outputFormat = 'markdown') => {
@@ -105,8 +136,22 @@ export const checkHealth = async () => {
  */
 export const getModels = async () => {
   const token = getToken();
-  const response = await axios.get(`${API_BASE_URL}/models${token ? `?token=${token}` : ''}`);
-  return response.data;
+  try {
+    const response = await axios.get(`${API_BASE_URL}/models${token ? `?token=${token}` : ''}`);
+    return response.data;
+  } catch (error) {
+    if (error.response?.status === 401) {
+      // Stored token is stale/wrong - drop it and ask for a fresh one
+      clearStoredToken();
+      const tokenUrl = `${window.location.origin}${window.location.pathname}?token=你的访问令牌`;
+      const authError = new Error(
+        `未授权（401）：请用 ${tokenUrl} 打开本页面，令牌需与 server/.env 的 ACCESS_TOKEN 一致`
+      );
+      authError.isAuthError = true;
+      throw authError;
+    }
+    throw error;
+  }
 };
 
 /**

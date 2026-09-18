@@ -32,7 +32,7 @@ cd client && npm run build
 
 **Server flow (PDF):**
 1. `index.js` receives upload → `fileHandler.js`
-2. `pdfUtils.js` converts PDF pages to PNG images via pdftoimg-js
+2. `pdfUtils.js` converts PDF pages to PNG images via `pdfjs-dist` + `@napi-rs/canvas` (custom `CanvasFactory`; `pdftoimg-js` is no longer used)
 3. Pages processed in parallel (configurable concurrency) via `ocrService.js`
 4. Failed pages retry with exponential backoff
 5. `tableUtils.js` merges tables spanning across pages
